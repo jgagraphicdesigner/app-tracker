@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
+<meta name="theme-color" content="#2a1a3a"/>
+<link rel="manifest" href="../manifest.json"/>
+<link rel="apple-touch-icon" href="../assets/icon-192.png"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="APP Tracker"/>
+<title>APP Project Management — People</title>
+<link rel="stylesheet" href="../css/main.css"/>
+<script>const t=localStorage.getItem("theme")||"light";document.documentElement.setAttribute("data-theme",t);</script>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" onclick="openSidebar()"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <div class="topbar-title">People</div>
+    </div>
+    <div class="topbar-right">
+      <button id="addPersonBtn" class="btn-primary" onclick="document.getElementById('addPersonModal').classList.add('open')" style="width:auto;height:auto;padding:8px 16px;border-radius:var(--radius-sm);display:none">+ Add person</button>
+    </div>
+  </div>
+  <div class="page-content">
+    <div id="saveAlert" style="display:none;margin-bottom:12px"></div>
+    <div class="people-grid" id="peopleGrid"><p style="color:var(--text-3);font-size:13px">Loading...</p></div>
+  </div>
+</div>
+</div>
+
+<!-- Add person modal -->
+<div class="modal-overlay" id="addPersonModal" onclick="if(event.target.id==='addPersonModal')this.classList.remove('open')">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add new person</h3>
+      <button class="modal-close" onclick="document.getElementById('addPersonModal').classList.remove('open')"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="field-row"><label class="field-label">Full name *</label><input type="text" id="new-name" class="field-input" placeholder="e.g. Sarah"/></div>
+      <div class="field-row"><label class="field-label">Username (no spaces) *</label><input type="text" id="new-uid" class="field-input" placeholder="e.g. sarah"/></div>
+      <div class="field-row"><label class="field-label">Role *</label><input type="text" id="new-role" class="field-input" placeholder="e.g. Copywriter"/></div>
+      <div class="field-row"><label class="field-label">PIN (4 digits) *</label><input type="password" id="new-pin" class="field-input" maxlength="4" inputmode="numeric" placeholder="••••"/></div>
+      <div class="field-row"><label class="field-label">Email</label><input type="email" id="new-email" class="field-input" placeholder="email@..."/></div>
+      <div id="addPersonError" class="alert alert-error" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('addPersonModal').classList.remove('open')">Cancel</button>
+      <button class="btn-primary" onclick="addPerson()" style="width:auto;height:auto;padding:8px 16px;border-radius:var(--radius-sm)">Add person</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { getAllUsers, createUser, saveUserProfile, setPresence, subscribePresence , subscribeCustomSpaces } from "../js/firebase.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS, isAdminUser, loadAdminStatus , mergeCustomSpaces } from "../js/helpers.js"
+import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
+
+const CURRENT_USER = authGuard();
+let presenceMap = {};
+function isOnline(uid) {
+  const p = presenceMap[uid];
+  return p && p.online && (Date.now() - p.lastSeen < 5 * 60 * 1000);
+}
+if (!CURRENT_USER) throw new Error("not auth");
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("people", getCurrentSpace()));
+document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("people"));
+setupSidebar(CURRENT_USER);
+setupNotifBadge(CURRENT_USER);
+// Keep sidebar spaces list in sync with custom spaces
+subscribeCustomSpaces(_cs => {
+  const _sb = document.getElementById("sidebar"); if (!_sb) return;
+  const _merged = mergeCustomSpaces(_cs, {});
+  _sb.outerHTML = renderSidebar("people", getCurrentSpace(), _merged);
+  setupSidebar(CURRENT_USER);
+});
+initTheme(); updateThemeBtn(localStorage.getItem("theme")||"light");
+window.toggleTheme = toggleTheme;
+window.doLogout = () => { sessionStorage.clear(); window.location.href = "../index.html"; };
+window.switchSpace = s => {};
+
+let _mergedUsers = {};
+
+function renderPeopleGrid() {
+  const grid = document.getElementById("peopleGrid");
+  if (!grid) return;
+  const amAdmin = isAdminUser(CURRENT_USER);
+  grid.innerHTML = Object.entries(_mergedUsers).map(([uid, u]) => {
+    const userIsAdmin = u.isAdmin || uid === "jc";
+    const adminBadge  = userIsAdmin ? `<span style="font-size:9px;background:var(--purple-dim);color:var(--purple);padding:2px 7px;border-radius:10px;font-weight:600;letter-spacing:.3px">⭐ Admin</span>` : "";
+    const adminToggle = amAdmin && uid !== "jc" ? `
+      <button class="btn-ghost" onclick="toggleAdmin('${uid}',${!userIsAdmin})" style="font-size:11px;padding:4px 10px;margin-top:8px;width:100%">
+        ${userIsAdmin ? "Remove Admin" : "Make Admin"}
+      </button>` : "";
+    return `
+    <div class="person-card" id="pcard-${uid}">
+      <div class="person-card-header">
+        <div class="av-wrap" style="position:relative;display:inline-flex">
+          <div class="av av-lg ${u.cls||"av-jc"}" style="font-size:16px">${u.photoURL?`<img src="${u.photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`:u.av||uid.slice(0,2).toUpperCase()}</div>
+          <span class="online-dot is-offline" id="dot-${uid}" style="position:absolute;bottom:2px;right:2px;width:11px;height:11px;border:2px solid var(--surface)" title="Offline"></span>
+        </div>
+        <div style="flex:1">
+          <div class="person-name" style="display:flex;align-items:center;gap:6px">${u.displayName||u.name||uid} ${adminBadge}</div>
+          <div class="person-role">${u.role||"Team member"}</div>
+        </div>
+      </div>
+      ${u.email ? `<div style="font-size:12px;color:var(--text-3)">✉ ${u.email}</div>` : ""}
+      ${u.whatsapp ? `<div style="font-size:12px;color:var(--text-3)">💬 ${u.whatsapp}</div>` : ""}
+      <div style="font-size:11px;color:var(--text-3);margin-top:4px">Login: <code>${uid}</code></div>
+      ${adminToggle}
+    </div>`;
+  }).join("");
+}
+
+function updatePresenceDots() {
+  // Only touch the dot spans — never rebuild the whole grid
+  Object.keys(_mergedUsers).forEach(uid => {
+    const dot = document.getElementById(`dot-${uid}`);
+    if (!dot) return;
+    const online = isOnline(uid);
+    dot.className = `online-dot ${online ? 'is-online' : 'is-offline'}`;
+    dot.title = online ? 'Online now' : 'Offline';
+  });
+}
+
+async function loadPeople() {
+  setPresence(CURRENT_USER, true);
+  window.addEventListener("beforeunload", () => setPresence(CURRENT_USER, false));
+
+  // Load admin status then users
+  await loadAdminStatus(CURRENT_USER);
+  if (isAdminUser(CURRENT_USER)) {
+    const btn = document.getElementById("addPersonBtn");
+    if (btn) btn.style.display = "";
+  }
+
+  const stored = await getAllUsers();
+  _mergedUsers = { ...DEFAULT_USERS };
+  Object.entries(stored).forEach(([k,v]) => { _mergedUsers[k] = { ..._mergedUsers[k], ...v }; });
+
+  renderPeopleGrid();
+  subscribePresence(data => { presenceMap = data; updatePresenceDots(); });
+}
+
+window.toggleAdmin = async function(uid, makeAdmin) {
+  if (!isAdminUser(CURRENT_USER)) { alert("Only admins can change roles."); return; }
+  await saveUserProfile(uid, { isAdmin: makeAdmin });
+  _mergedUsers[uid] = { ..._mergedUsers[uid], isAdmin: makeAdmin };
+  renderPeopleGrid();
+  updatePresenceDots();
+  // Clear admin cache for that user so next login picks it up
+  sessionStorage.removeItem("app_admin_" + uid);
+};
+
+window.addPerson = async function() {
+  if (!isAdminUser(CURRENT_USER)) { alert("Admin access required."); return; }
+  const name  = document.getElementById("new-name").value.trim();
+  const uid   = document.getElementById("new-uid").value.trim().toLowerCase().replace(/\s/g,"");
+  const role  = document.getElementById("new-role").value.trim();
+  const pin   = document.getElementById("new-pin").value.trim();
+  const email = document.getElementById("new-email").value.trim();
+  const errEl = document.getElementById("addPersonError");
+
+  if (!name || !uid || !role || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+    errEl.textContent = "Please fill in all required fields with a valid 4-digit PIN.";
+    errEl.style.display = "block"; return;
+  }
+  errEl.style.display = "none";
+
+  const newUser = { name, role, pin, email, av: name.slice(0,2).toUpperCase(), cls:"av-jc" };
+  await createUser(uid, newUser);
+  document.getElementById("addPersonModal").classList.remove("open");
+  ["new-name","new-uid","new-role","new-pin","new-email"].forEach(id => document.getElementById(id).value = "");
+  // Update local cache and re-render grid — no full Firebase reload needed
+  _mergedUsers[uid] = newUser;
+  renderPeopleGrid();
+  updatePresenceDots();
+
+  const alert = document.getElementById("saveAlert");
+  alert.className = "alert alert-success";
+  alert.textContent = `${name} added! They can log in with username "${uid}" and their PIN.`;
+  alert.style.display = "block";
+  setTimeout(() => { alert.style.display = "none"; }, 4000);
+};
+
+loadPeople();
+</script>
+<script>
+function openSidebar()  { document.getElementById("sidebar").classList.add("mobile-open"); document.getElementById("sidebarOverlay").classList.add("visible"); document.body.style.overflow="hidden"; }
+function closeSidebar() { document.getElementById("sidebar").classList.remove("mobile-open"); document.getElementById("sidebarOverlay").classList.remove("visible"); document.body.style.overflow=""; }
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/app-tracker/sw.js')
+      .then(r => console.log('[PWA] Service worker registered'))
+      .catch(e => console.log('[PWA] SW registration failed:', e));
+  });
+}
+</script>
+</body>
+</html>

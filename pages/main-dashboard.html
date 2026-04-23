@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
+<meta name="theme-color" content="#2a1a3a"/>
+  <link rel="manifest" href="../manifest.json"/>
+  <link rel="apple-touch-icon" href="../assets/icon-192.png"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="APP Tracker"/>
+<title>APP Project Management — Main Dashboard</title>
+<link rel="stylesheet" href="../css/main.css"/>
+<script>const t=localStorage.getItem("theme")||"light";document.documentElement.setAttribute("data-theme",t);</script>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" onclick="openSidebar()"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <div>
+        <div class="topbar-title">Main Dashboard</div>
+        <div style="font-size:11px;color:var(--text-3);margin-top:1px">All spaces overview</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="notif-wrap">
+        <button class="btn-icon" onclick="toggleNotifs()">
+          <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><path d="M7.5 1.5A4 4 0 003.5 5.5V8L2 9.5h11L11.5 8V5.5A4 4 0 007.5 1.5z" stroke="currentColor" stroke-width="1.3"/><path d="M6 9.5v.5a1.5 1.5 0 003 0V9.5" stroke="currentColor" stroke-width="1.3"/></svg>
+          <span class="notif-badge" id="notifBadge" style="display:none">0</span>
+        </button>
+        <div class="notif-panel" id="notifPanel" style="display:none">
+          <div class="notif-head"><span>Notifications</span><button onclick="clearNotifs()" style="font-size:11px;color:var(--text-3);background:none;border:none;cursor:pointer">Clear all</button></div>
+          <div id="notifList"><p class="notif-empty">No notifications</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="page-content">
+    <!-- Global stats -->
+    <div class="stats-grid" id="globalStats"></div>
+
+    <!-- Space quick overviews -->
+    <div style="margin-bottom:1.5rem">
+      <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:10px">Space overview</div>
+      <div id="spaceOverviews"></div>
+    </div>
+
+    <!-- Per-person pending tasks -->
+    <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:10px">Team workload</div>
+    <div class="main-dash-grid" id="personCards"></div>
+  </div>
+</div>
+</div>
+
+<script type="module">
+import { subscribeProjects, subscribeNotifications, markNotifRead, clearNotifications, setPresence, subscribePresence, getAllUsers, subscribeCustomSpaces } from "../js/firebase.js";
+import { DEFAULT_USERS, BASE_SPACES, statusClass, priorityClass, formatDate, timeAgo, authGuard, getCurrentSpace, setCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, mergeCustomSpaces } from "../js/helpers.js";
+import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
+
+const CURRENT_USER = authGuard();
+let presenceMap = {};
+function isOnline(uid) {
+  const p = presenceMap[uid];
+  return p && p.online && (Date.now() - p.lastSeen < 5 * 60 * 1000);
+}
+if (!CURRENT_USER) throw new Error("not auth");
+
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("main-dashboard", getCurrentSpace()));
+document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("main-dashboard"));
+setupSidebar(CURRENT_USER);
+setupNotifBadge(CURRENT_USER);
+// Keep sidebar spaces list in sync with custom spaces
+subscribeCustomSpaces(_cs => {
+  const _sb = document.getElementById("sidebar"); if (!_sb) return;
+  const _merged = mergeCustomSpaces(_cs, {});
+  _sb.outerHTML = renderSidebar("main-dashboard", getCurrentSpace(), _merged);
+  setupSidebar(CURRENT_USER);
+});
+initTheme(); updateThemeBtn(localStorage.getItem("theme")||"light");
+window.toggleTheme = toggleTheme;
+window.doLogout = () => { sessionStorage.clear(); window.location.href = "../index.html"; };
+window.switchSpace = s => { setCurrentSpace(s); location.href = "dashboard.html"; };
+window.openNewProject = () => { location.href = "dashboard.html"; };
+window.openAddSpaceModal = () => {};
+
+const SPACE_COLORS = { email:"#7c5cbf", pdf:"#2aab6f", prints:"#e0694a" };
+let projectsBySpace = { email:[], pdf:[], prints:[] };
+let notifications = [];
+let _allSpaces = { ...BASE_SPACES };  // includes custom spaces when loaded
+let _allUsers  = { ...DEFAULT_USERS }; // includes Firebase users when loaded
+
+function allActiveProjects() {
+  const all = [];
+  Object.values(projectsBySpace).forEach(arr => all.push(...arr));
+  return all.filter(p => p.status !== "Published");
+}
+
+function getOwnerForProject(p) {
+  const sp = _allSpaces[p.space || "email"];
+  if (!sp) return null;
+  return sp.stages.find(s => s.id === Number(p.stage))?.owner || null;
+}
+
+function renderAll() {
+  renderGlobalStats();
+  renderSpaceOverviews();
+  renderPersonCards();
+}
+
+function renderGlobalStats() {
+  const active  = allActiveProjects();
+  const today   = new Date(); today.setHours(0,0,0,0);
+  const overdue = active.filter(p => p.due && new Date(p.due+"T00:00:00") < today).length;
+  const high    = active.filter(p => p.priority === "High").length;
+  const pub     = [...projectsBySpace.email,...projectsBySpace.pdf,...projectsBySpace.prints].filter(p=>p.status==="Published").length;
+  document.getElementById("globalStats").innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total active</div><div class="stat-val">${active.length}</div></div>
+    <div class="stat-card"><div class="stat-label">High priority</div><div class="stat-val" style="${high>0?"color:#a32d2d":""}">${high}</div></div>
+    <div class="stat-card"><div class="stat-label">Overdue</div><div class="stat-val" style="${overdue>0?"color:var(--rev-fg)":""}">${overdue}</div></div>
+    <div class="stat-card"><div class="stat-label">Published</div><div class="stat-val">${pub}</div></div>`;
+}
+
+function renderSpaceOverviews() {
+  const container = document.getElementById("spaceOverviews");
+  container.innerHTML = Object.entries(_allSpaces).map(([sid, sp]) => {
+    const active  = (projectsBySpace[sid]||[]).filter(p => p.status !== "Published");
+    const today   = new Date(); today.setHours(0,0,0,0);
+    const color   = sp.color || SPACE_COLORS[sid] || "#7c5cbf";
+    const stageData = (sp.stages||[]).map(st => ({
+      ...st, count: active.filter(p => Number(p.stage) === st.id).length
+    }));
+    return `
+      <div class="space-quick-overview" style="border-left: 3px solid ${color}">
+        <div class="spo-header">
+          <div class="spo-title" style="display:flex;align-items:center;gap:8px">
+            <span style="width:8px;height:8px;border-radius:50%;background:${color};flex-shrink:0"></span>
+            ${sp.label} Space
+            <span style="font-size:11px;color:var(--text-3);font-weight:400">${active.length} active</span>
+          </div>
+          <button class="btn-ghost" onclick="switchSpace('${sid}')" style="font-size:11px;padding:4px 10px">Open board →</button>
+        </div>
+        <div class="spo-stages">
+          ${stageData.map(st => `
+            <div class="spo-stage ${st.count>0?"has-items":""}">
+              <span style="font-size:10px;color:var(--text-3)">${st.name.split(" ")[0]}</span>
+              <span class="spo-stage-count" style="${st.count>0?"color:var(--text-1)":"color:var(--text-3)"}">${st.count}</span>
+            </div>`).join("")}
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function renderPersonCards() {
+  const container = document.getElementById("personCards");
+  const active    = allActiveProjects();
+  const today     = new Date(); today.setHours(0,0,0,0);
+
+  // Gather all users who appear as owners
+  const ownerIds = new Set();
+  active.forEach(p => {
+    const owner = getOwnerForProject(p);
+    if (owner) ownerIds.add(owner);
+  });
+
+  // Also include all live users
+  Object.keys(_allUsers).forEach(uid => ownerIds.add(uid));
+
+  container.innerHTML = [...ownerIds].map(uid => {
+    const u       = _allUsers[uid] || { name: uid, av: uid.slice(0,2).toUpperCase(), cls: "av-jc", role: "Team member" };
+    const myTasks = active.filter(p => getOwnerForProject(p) === uid);
+    const overdue = myTasks.filter(p => p.due && new Date(p.due+"T00:00:00") < today).length;
+    const high    = myTasks.filter(p => p.priority === "High").length;
+
+    const taskRows = myTasks.length ? myTasks.map(p => {
+      const sp      = BASE_SPACES[p.space||"email"];
+      const stage   = sp?.stages.find(s => s.id===Number(p.stage));
+      const isOD    = p.due && new Date(p.due+"T00:00:00") < today;
+      return `
+        <div class="pdc-task-row" onclick="switchSpace('${p.space||'email'}')">
+          ${p.priority==="High" ? `<span style="font-size:10px">🔴</span>` : ""}
+          <div class="pdc-task-name">${p.name}</div>
+          <span class="badge ${statusClass(p.status||'In Progress')}" style="font-size:9px;padding:1px 5px">${p.status||"In Progress"}</span>
+          ${isOD ? `<span class="badge badge-overdue" style="font-size:9px;padding:1px 5px">OD</span>` : ""}
+          <span class="pdc-task-space">${sp?.label||p.space}</span>
+        </div>`;
+    }).join("") : `<div class="pdc-empty">No pending tasks 🎉</div>`;
+
+    return `
+      <div class="person-dash-card">
+        <div class="pdc-header">
+          <div class="av-wrap" style="position:relative;flex-shrink:0">
+            <div class="av ${u.cls}" style="width:40px;height:40px;font-size:14px">${u.av}</div>
+            <span class="online-dot ${isOnline(uid) ? 'is-online' : 'is-offline'}" style="position:absolute;bottom:1px;right:1px;border-color:var(--surface)" title="${isOnline(uid) ? 'Online' : 'Offline'}"></span>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:var(--text-1);display:flex;align-items:center;gap:6px">${u.name} ${isOnline(uid) ? '<span style="font-size:10px;color:#22c55e;font-weight:500">● Online</span>' : ''}</div>
+            <div style="font-size:11px;color:var(--text-3)">${u.role}</div>
+          </div>
+        </div>
+        <div class="pdc-stats">
+          <div class="pdc-stat"><div class="pdc-stat-val">${myTasks.length}</div><div class="pdc-stat-label">Pending</div></div>
+          <div class="pdc-stat"><div class="pdc-stat-val" style="${high>0?"color:#a32d2d":""}">${high}</div><div class="pdc-stat-label">High priority</div></div>
+          <div class="pdc-stat"><div class="pdc-stat-val" style="${overdue>0?"color:var(--rev-fg)":""}">${overdue}</div><div class="pdc-stat-label">Overdue</div></div>
+        </div>
+        <div class="pdc-tasks">${taskRows}</div>
+      </div>`;
+  }).join("");
+}
+
+// Notifications
+window.toggleNotifs = () => { const p=document.getElementById("notifPanel"); p.style.display=p.style.display==="none"?"block":"none"; };
+window.readNotif    = id => markNotifRead(CURRENT_USER, id);
+window.clearNotifs  = async () => { await clearNotifications(CURRENT_USER); document.getElementById("notifPanel").style.display="none"; };
+document.addEventListener("click", e => { if (!e.target.closest(".notif-wrap")) { const p=document.getElementById("notifPanel"); if(p) p.style.display="none"; } });
+
+subscribeNotifications(CURRENT_USER, notifs => {
+  notifications = notifs;
+  const list = document.getElementById("notifList"); if(!list) return;
+  const unread = notifs.filter(n=>!n.read).length;
+  const badge  = document.getElementById("notifBadge");
+  if (badge) { badge.textContent=unread; badge.style.display=unread>0?"flex":"none"; }
+  if (!notifs.length) { list.innerHTML=`<p class="notif-empty">No notifications</p>`; return; }
+  list.innerHTML = notifs.slice(0,15).map(n=>`
+    <div class="notif-item ${n.read?"":"unread"}" onclick="readNotif('${n.id}')">
+      <div class="ni-title">${n.title}</div>
+      <div class="ni-sub">${n.message} · ${timeAgo(n.timestamp)}</div>
+    </div>`).join("");
+});
+
+let _dashRaf = null;
+function scheduleRender() {
+  if (_dashRaf) cancelAnimationFrame(_dashRaf);
+  _dashRaf = requestAnimationFrame(() => { _dashRaf = null; renderAll(); });
+}
+
+// Load live users once on init
+getAllUsers().then(stored => {
+  _allUsers = { ...DEFAULT_USERS };
+  Object.entries(stored).forEach(([k,v]) => { _allUsers[k] = { ..._allUsers[k]||{}, ...v }; });
+  scheduleRender();
+}).catch(() => {});
+
+// Subscribe to custom spaces
+subscribeCustomSpaces(customs => {
+  _allSpaces = mergeCustomSpaces(customs, { ...BASE_SPACES });
+  // Subscribe to projects for any new custom space
+  Object.keys(customs).forEach(sid => {
+    if (!projectsBySpace[sid]) {
+      projectsBySpace[sid] = [];
+      subscribeProjects(sid, projects => { projectsBySpace[sid] = projects; scheduleRender(); });
+    }
+  });
+  scheduleRender();
+});
+
+["email","pdf","prints"].forEach(sp => {
+  subscribeProjects(sp, projects => {
+    projectsBySpace[sp] = projects;
+    scheduleRender();
+  });
+});
+</script>
+<script>
+function openSidebar()  { document.getElementById("sidebar").classList.add("mobile-open"); document.getElementById("sidebarOverlay").classList.add("visible"); document.body.style.overflow="hidden"; }
+function closeSidebar() { document.getElementById("sidebar").classList.remove("mobile-open"); document.getElementById("sidebarOverlay").classList.remove("visible"); document.body.style.overflow=""; }
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/app-tracker/sw.js')
+      .then(r => console.log('[PWA] Service worker registered'))
+      .catch(e => console.log('[PWA] SW registration failed:', e));
+  });
+}
+</script>
+</body>
+</html>

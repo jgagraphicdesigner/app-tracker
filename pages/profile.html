@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
+<meta name="theme-color" content="#2a1a3a"/>
+<link rel="manifest" href="../manifest.json"/>
+<link rel="apple-touch-icon" href="../assets/icon-192.png"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="APP Tracker"/>
+<title>APP Project Management — Profile</title>
+<link rel="stylesheet" href="../css/main.css"/>
+<script>const t=localStorage.getItem("theme")||"light";document.documentElement.setAttribute("data-theme",t);</script>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" onclick="openSidebar()"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <div class="topbar-title">My profile</div>
+    </div>
+  </div>
+  <div class="page-content">
+    <div class="profile-wrap">
+      <div id="saveAlert" style="display:none;margin-bottom:12px"></div>
+      <div class="profile-card">
+        <h3>Photo &amp; display</h3>
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:1.25rem">
+          <label class="avatar-upload">
+            <div class="av av-lg" id="profileAvatar"></div>
+            <div class="avatar-upload-overlay"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg></div>
+            <input type="file" id="photoInput" accept="image/*" onchange="handlePhotoUpload(event)"/>
+          </label>
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text-3);margin-bottom:4px">Click photo to update</div>
+          </div>
+        </div>
+        <div class="profile-fields" style="display:flex;flex-direction:column;gap:10px">
+          <div class="field-row">
+            <label class="field-label">Display name</label>
+            <input type="text" id="f-displayname" class="field-input" placeholder="Your name"/>
+          </div>
+          <div class="field-row">
+            <label class="field-label">Role</label>
+            <input type="text" id="f-role" class="field-input" placeholder="e.g. Designer, QA, Approver"/>
+          </div>
+        </div>
+      </div>
+      <div class="profile-card">
+        <h3>Notifications</h3>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="field-row"><label class="field-label">Email address</label><input type="email" id="f-email" class="field-input" placeholder="your@email.com"/><div class="field-hint">Get emailed when a task is assigned to you</div></div>
+          <div class="field-row"><label class="field-label">WhatsApp number</label><input type="tel" id="f-whatsapp" class="field-input" placeholder="+61412345678"/><div class="field-hint">Include country code</div></div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;font-size:12px;color:var(--text-2);line-height:1.7">
+            <strong style="color:var(--text-1);display:block;margin-bottom:4px">WhatsApp activation (one-time per person)</strong>
+            1. Save <strong style="color:var(--purple)">+34 611 04 87 48</strong> as a contact<br/>
+            2. Send: <code>I allow callmebot to send me messages</code><br/>
+            3. Reply will include your API key — paste it below
+          </div>
+          <div class="field-row"><label class="field-label">CallMeBot API key</label><input type="text" id="f-wakey" class="field-input" placeholder="e.g. 1234567"/></div>
+        </div>
+      </div>
+      <div class="profile-card">
+        <h3>Change PIN</h3>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div class="field-row"><label class="field-label">New PIN</label><input type="password" id="f-pin" class="field-input" maxlength="4" inputmode="numeric" placeholder="••••"/></div>
+          <div class="field-row"><label class="field-label">Confirm PIN</label><input type="password" id="f-pin2" class="field-input" maxlength="4" inputmode="numeric" placeholder="••••"/></div>
+        </div>
+      </div>
+      <button class="btn-primary" onclick="saveProfile()" style="width:100%;padding:11px;font-size:14px;border-radius:var(--radius-sm)">Save changes</button>
+    </div>
+  </div>
+</div>
+</div>
+<script type="module">
+import { getUserProfile, saveUserProfile, updatePin , subscribeCustomSpaces } from "../js/firebase.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS , mergeCustomSpaces } from "../js/helpers.js"
+import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
+
+const CURRENT_USER = authGuard();
+if (!CURRENT_USER) throw new Error("not auth");
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("profile", getCurrentSpace()));
+document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("profile"));
+setupSidebar(CURRENT_USER);
+setupNotifBadge(CURRENT_USER);
+// Keep sidebar spaces list in sync with custom spaces
+subscribeCustomSpaces(_cs => {
+  const _sb = document.getElementById("sidebar"); if (!_sb) return;
+  const _merged = mergeCustomSpaces(_cs, {});
+  _sb.outerHTML = renderSidebar("profile", getCurrentSpace(), _merged);
+  setupSidebar(CURRENT_USER);
+});
+initTheme(); updateThemeBtn(localStorage.getItem("theme")||"light");
+window.toggleTheme = toggleTheme;
+window.doLogout = () => { sessionStorage.clear(); window.location.href = "../index.html"; };
+window.switchSpace = s => {};
+
+const u = DEFAULT_USERS[CURRENT_USER] || { name: CURRENT_USER, av: "?", cls: "av-jc", role: "Team member" };
+const avEl = document.getElementById("profileAvatar");
+avEl.className = `av av-lg ${u.cls}`; avEl.textContent = u.av;
+
+async function loadProfile() {
+  const p = await getUserProfile(CURRENT_USER);
+  if (p.photoURL) avEl.innerHTML = `<img src="${p.photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`;
+  if (p.email)    document.getElementById("f-email").value       = p.email;
+  if (p.whatsapp) document.getElementById("f-whatsapp").value    = p.whatsapp;
+  if (p.waKey)    document.getElementById("f-wakey").value       = p.waKey;
+  // Pre-fill name and role — prefer saved profile, fallback to defaults
+  document.getElementById("f-displayname").value = p.displayName || u.name || CURRENT_USER;
+  document.getElementById("f-role").value        = p.role        || u.role || "";
+}
+loadProfile();
+
+window.handlePhotoUpload = function(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    avEl.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>`;
+    sessionStorage.setItem(`photo_${CURRENT_USER}`, e.target.result);
+  };
+  reader.readAsDataURL(file);
+};
+
+window.saveProfile = async function() {
+  const email    = document.getElementById("f-email").value.trim();
+  const whatsapp = document.getElementById("f-whatsapp").value.trim();
+  const waKey    = document.getElementById("f-wakey").value.trim();
+  const pin      = document.getElementById("f-pin").value.trim();
+  const pin2     = document.getElementById("f-pin2").value.trim();
+  const alertEl  = document.getElementById("saveAlert");
+  if (pin && (pin.length !== 4 || !/^\d{4}$/.test(pin))) { alertEl.className="alert alert-error"; alertEl.textContent="PIN must be 4 digits."; alertEl.style.display="block"; return; }
+  if (pin && pin !== pin2) { alertEl.className="alert alert-error"; alertEl.textContent="PINs do not match."; alertEl.style.display="block"; return; }
+  try {
+    const displayName = document.getElementById("f-displayname").value.trim() || u.name;
+    const role        = document.getElementById("f-role").value.trim();
+    const data = { email, whatsapp, waKey, displayName, role };
+    const photo = sessionStorage.getItem(`photo_${CURRENT_USER}`);
+    if (photo) data.photoURL = photo;
+    await saveUserProfile(CURRENT_USER, data);
+    if (pin) await updatePin(CURRENT_USER, pin);
+    document.getElementById("f-pin").value = ""; document.getElementById("f-pin2").value = "";
+    alertEl.className="alert alert-success"; alertEl.textContent="Profile saved!"; alertEl.style.display="block";
+    setTimeout(() => { alertEl.style.display="none"; }, 3000);
+  } catch(err) { alertEl.className="alert alert-error"; alertEl.textContent="Save failed."; alertEl.style.display="block"; }
+};
+</script>
+<script>
+function openSidebar()  { document.getElementById("sidebar").classList.add("mobile-open"); document.getElementById("sidebarOverlay").classList.add("visible"); document.body.style.overflow="hidden"; }
+function closeSidebar() { document.getElementById("sidebar").classList.remove("mobile-open"); document.getElementById("sidebarOverlay").classList.remove("visible"); document.body.style.overflow=""; }
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/app-tracker/sw.js')
+      .then(r => console.log('[PWA] Service worker registered'))
+      .catch(e => console.log('[PWA] SW registration failed:', e));
+  });
+}
+</script>
+</body>
+</html>
