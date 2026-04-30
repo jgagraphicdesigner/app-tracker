@@ -1,4 +1,4 @@
-const CACHE_NAME = "app-tracker-20260422-v57";
+const CACHE_NAME = "app-tracker-20260422-v58";
 
 // Files to cache for offline fallback
 const PRECACHE = [
@@ -59,8 +59,11 @@ self.addEventListener("fetch", event => {
   // Network-first for ALL app resources — ensures new deployments load immediately.
   // localStorage cache handles instant custom-space rendering (not the SW).
   // Falls back to SW cache if offline.
+  // Use cache:'reload' to bypass browser HTTP cache — ensures we always
+  // get the latest JS/CSS from GitHub Pages, not a browser-cached version.
+  const fetchReq = new Request(event.request, { cache: 'no-cache' });
   event.respondWith(
-    fetch(event.request)
+    fetch(fetchReq)
       .then(response => {
         if (response && response.status === 200) {
           const clone = response.clone();
