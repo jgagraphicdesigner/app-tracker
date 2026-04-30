@@ -58,7 +58,7 @@
 
 <script type="module">
 import { subscribeProjects, subscribeNotifications, markNotifRead, clearNotifications, setPresence, subscribePresence, getAllUsers, subscribeSpaceConfigs, subscribeCustomSpaces } from "../js/firebase.js";
-import { DEFAULT_USERS, BASE_SPACES, getCachedSpaces, statusClass, priorityClass, formatDate, timeAgo, authGuard, getCurrentSpace, setCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, mergeSpaceConfig, mergeCustomSpaces } from "../js/helpers.js";
+import { DEFAULT_USERS, BASE_SPACES, getCachedSpaces, cacheSpaces, statusClass, priorityClass, formatDate, timeAgo, authGuard, getCurrentSpace, setCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, mergeSpaceConfig, mergeCustomSpaces } from "../js/helpers.js";
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
@@ -80,6 +80,7 @@ let _sidebarConfigs = {};
 function _refreshPageSidebar() {
   const sb = document.getElementById("sidebar"); if (!sb) return;
   const merged = mergeSpaceConfig(_sidebarConfigs, mergeCustomSpaces(_sidebarCustoms, BASE_SPACES));
+  cacheSpaces(merged);
   sb.outerHTML = renderSidebar("main-dashboard", getCurrentSpace(), merged);
   setupSidebar(CURRENT_USER);
 }

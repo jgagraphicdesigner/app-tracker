@@ -57,7 +57,7 @@
 
 <script type="module">
 import { getAllUsers, createUser, saveUserProfile, setPresence, subscribePresence , subscribeSpaceConfigs, subscribeCustomSpaces } from "../js/firebase.js"
-import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS, isAdminUser, loadAdminStatus, mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES, getCachedSpaces, cacheUsers } from "../js/helpers.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS, isAdminUser, loadAdminStatus, mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES, getCachedSpaces, cacheSpaces, cacheUsers } from "../js/helpers.js"
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
@@ -78,6 +78,7 @@ let _sidebarConfigs = {};
 function _refreshPageSidebar() {
   const sb = document.getElementById("sidebar"); if (!sb) return;
   const merged = mergeSpaceConfig(_sidebarConfigs, mergeCustomSpaces(_sidebarCustoms, BASE_SPACES));
+  cacheSpaces(merged);
   sb.outerHTML = renderSidebar("people", getCurrentSpace(), merged);
   setupSidebar(CURRENT_USER);
 }

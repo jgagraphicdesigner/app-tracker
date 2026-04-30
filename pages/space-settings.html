@@ -220,7 +220,7 @@ import {
   subscribeSpaceConfigs, subscribeCustomSpaces
 } from "../js/firebase.js";
 import {
-  BASE_SPACES, getCachedSpaces, DEFAULT_USERS,
+  BASE_SPACES, getCachedSpaces, cacheSpaces, DEFAULT_USERS,
   authGuard, getCurrentSpace, setCurrentSpace,
   setupSidebar, setupNotifBadge,
   initTheme, updateThemeBtn, toggleTheme,
@@ -242,6 +242,7 @@ let _sidebarConfigs = {};
 function _refreshPageSidebar() {
   const sb = document.getElementById("sidebar"); if (!sb) return;
   const merged = mergeSpaceConfig(_sidebarConfigs, mergeCustomSpaces(_sidebarCustoms, BASE_SPACES));
+  cacheSpaces(merged);
   sb.outerHTML = renderSidebar("space-settings", getCurrentSpace(), merged);
   setupSidebar(CURRENT_USER);
 }
