@@ -238,7 +238,7 @@ setupNotifBadge(CURRENT_USER);
 // Keep sidebar spaces list in sync with custom spaces
 subscribeCustomSpaces(_cs => {
   const _sb = document.getElementById("sidebar"); if (!_sb) return;
-  const _merged = mergeCustomSpaces(_cs, {});
+  const _merged = mergeCustomSpaces(_cs, BASE_SPACES);
   _sb.outerHTML = renderSidebar("space-settings", getCurrentSpace(), _merged);
   setupSidebar(CURRENT_USER);
 });

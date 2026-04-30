@@ -489,7 +489,7 @@
 <div class="eb-toast" id="ebToast"></div>
 
 <script type="module">
-import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, setCurrentSpace , mergeCustomSpaces } from "../js/helpers.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, setCurrentSpace , mergeCustomSpaces, BASE_SPACES} from "../js/helpers.js"
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
@@ -501,7 +501,7 @@ setupNotifBadge(CURRENT_USER);
 // Keep sidebar spaces list in sync with custom spaces
 subscribeCustomSpaces(_cs => {
   const _sb = document.getElementById("sidebar"); if (!_sb) return;
-  const _merged = mergeCustomSpaces(_cs, {});
+  const _merged = mergeCustomSpaces(_cs, BASE_SPACES);
   _sb.outerHTML = renderSidebar("email-builder", getCurrentSpace(), _merged);
   setupSidebar(CURRENT_USER);
 });

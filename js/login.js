@@ -3,19 +3,34 @@ import { DEFAULT_USERS } from "./helpers.js";
 
 let selectedUser = null;
 
-async function loadMemberGrid() {
-  const stored = await getAllUsers();
-  const all = { ...DEFAULT_USERS };
-  Object.entries(stored).forEach(([k,v]) => { if (!all[k]) all[k] = v; else all[k] = {...all[k],...v}; });
+function renderMemberGrid(all) {
   const grid = document.getElementById("memberGrid");
+  if (!grid) return;
+  // Preserve current selection across re-renders
+  const prevSelected = selectedUser;
   grid.innerHTML = Object.entries(all).map(([uid,u]) => `
-    <button class="member-btn" data-user="${uid}" onclick="selectMember(this)">
+    <button class="member-btn${prevSelected===uid?' selected':''}" data-user="${uid}" onclick="selectMember(this)">
       <div class="av ${u.cls||'av-jc'}" id="av-login-${uid}" style="width:36px;height:36px;font-size:12px;font-weight:600">
         ${u.photoURL ? `<img src="${u.photoURL}" style="width:100%;height:100%;object-fit:cover;border-radius:50%"/>` : u.av||uid.slice(0,2).toUpperCase()}
       </div>
       <span class="mb-name">${u.name||uid}</span>
       <span class="mb-role">${u.role||"Team member"}</span>
     </button>`).join("");
+}
+
+async function loadMemberGrid() {
+  // Step 1: Render DEFAULT_USERS immediately — no wait, no flash
+  renderMemberGrid({ ...DEFAULT_USERS });
+
+  // Step 2: Fetch Firebase users and merge — new members appear without reload
+  try {
+    const stored = await getAllUsers();
+    const all = { ...DEFAULT_USERS };
+    Object.entries(stored).forEach(([k,v]) => { if (!all[k]) all[k] = v; else all[k] = {...all[k],...v}; });
+    renderMemberGrid(all);
+  } catch(e) {
+    console.warn("[Login] Could not load Firebase users, using defaults:", e);
+  }
 }
 loadMemberGrid();
 

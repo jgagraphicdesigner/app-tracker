@@ -1,4 +1,4 @@
-const CACHE_NAME = "app-tracker-20260422-v50";
+const CACHE_NAME = "app-tracker-20260422-v51";
 
 // Files to cache for offline fallback
 const PRECACHE = [
@@ -56,12 +56,26 @@ self.addEventListener("fetch", event => {
       url.includes("callmebot") || url.includes("chart.js") ||
       url.includes("cdnjs")) return;
 
-  // Cache-first strategy for app shell (HTML, CSS, JS, assets)
-  // These files are versioned by CACHE_NAME, so stale = same version = fine
+  const isHtml    = url.includes(".html") || url.endsWith("/app-tracker/") || url.endsWith("/app-tracker");
   const isAppShell = PRECACHE.some(p => url.endsWith(p) || url.includes(p.replace("/app-tracker","")));
 
-  if (isAppShell) {
-    // Cache-first: serve from cache instantly, update in background (stale-while-revalidate)
+  if (isHtml) {
+    // Network-first for HTML — always get fresh page so new JS deploys are picked up.
+    // Falls back to cache if offline.
+    event.respondWith(
+      fetch(event.request)
+        .then(response => {
+          if (response && response.status === 200) {
+            const clone = response.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(event.request))
+    );
+  } else if (isAppShell) {
+    // Cache-first for JS/CSS/assets — versioned by CACHE_NAME so safe to cache
+    // Stale-while-revalidate: serve instantly from cache, update in background
     event.respondWith(
       caches.open(CACHE_NAME).then(cache =>
         cache.match(event.request).then(cached => {
@@ -71,12 +85,12 @@ self.addEventListener("fetch", event => {
             }
             return response;
           }).catch(() => cached);
-          return cached || fetchPromise; // serve cache instantly if available
+          return cached || fetchPromise;
         })
       )
     );
   } else {
-    // Network-first for everything else, fall back to cache
+    // Network-first for everything else
     event.respondWith(
       fetch(event.request)
         .then(response => {

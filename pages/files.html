@@ -169,7 +169,7 @@
 
 <script type="module">
 import { saveFile, deleteFile, subscribeFiles, updateFile, saveCanvaLink as fbSaveCanvaLink, deleteCanvaLink, updateCanvaLink, subscribeCanvaLinks, saveFolder, deleteFolder, subscribeFolders, moveFileToFolder , subscribeCustomSpaces } from "../js/firebase.js"
-import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme , mergeCustomSpaces } from "../js/helpers.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme , mergeCustomSpaces, BASE_SPACES} from "../js/helpers.js"
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
@@ -181,7 +181,7 @@ setupNotifBadge(CURRENT_USER);
 // Keep sidebar spaces list in sync with custom spaces
 subscribeCustomSpaces(_cs => {
   const _sb = document.getElementById("sidebar"); if (!_sb) return;
-  const _merged = mergeCustomSpaces(_cs, {});
+  const _merged = mergeCustomSpaces(_cs, BASE_SPACES);
   _sb.outerHTML = renderSidebar("files", getCurrentSpace(), _merged);
   setupSidebar(CURRENT_USER);
 });

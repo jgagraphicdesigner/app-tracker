@@ -2669,22 +2669,17 @@ async function init() {
     updateSpaceBanner();
   }
 
-  let _lastSpaceConfigJson = "";
+  // No dedup guards — Firebase onValue fires once on attach (initial data)
+  // then again only when data changes. We WANT the initial fire to always
+  // apply, so custom spaces appear on every page load without user interaction.
   subscribeSpaceConfigs(configs => {
-    const json = JSON.stringify(configs);
-    if (json === _lastSpaceConfigJson) return;
-    _lastSpaceConfigJson = json;
     _latestSpaceConfigs = configs;
     applyAllSpaceData();
   });
 
-  let _lastCustomJson = "";
   subscribeCustomSpaces(customs => {
-    const json = JSON.stringify(customs);
-    if (json === _lastCustomJson) return;
-    _lastCustomJson = json;
     _latestCustomSpaces = customs;
-    // Subscribe to projects in each new custom space
+    // Subscribe to projects in each custom space
     Object.keys(customs).forEach(sid => {
       if (!projectsBySpace[sid]) {
         projectsBySpace[sid] = [];
