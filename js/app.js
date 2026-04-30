@@ -108,7 +108,7 @@ window.updateLinkIcon = function(idx) {
   renderLinkEditor();
 };
 
-let projectsBySpace = { email:[], pdf:[], prints:[] };
+const projectsBySpace = { email:[], pdf:[], prints:[] }; // custom spaces added dynamically
 let notifications   = [];
 let editingId       = null;
 let activeFilter    = "all";
@@ -121,7 +121,7 @@ let chartInstance   = null;
 let chartMode       = "stage";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function allProjects() { return [...projectsBySpace.email, ...projectsBySpace.pdf, ...projectsBySpace.prints]; }
+function allProjects() { return Object.values(projectsBySpace).flat(); }
 function currentProjects() {
   const s = getCurrentSpace();
   return s === "all" ? allProjects() : projectsBySpace[s] || [];
@@ -2241,7 +2241,7 @@ window.openDetail = function(p) {
       ${p.priority ? `<div class="detail-field"><div class="df-label">Priority</div><div class="df-val"><span class="badge badge-priority-${p.priority.toLowerCase()}">${p.priority==="High"?"🔴":p.priority==="Medium"?"🟡":"🟢"} ${p.priority}</span></div></div>` : ""}
       <div class="detail-field"><div class="df-label">Stage</div><div class="df-val"><span class="stage-pill" style="background:${sc}18;color:${sc}">${stage?.name||"—"}</span></div></div>
       <div class="detail-field"><div class="df-label">Owner</div><div class="df-val">${stage?DEFAULT_USERS[stage.owner]?.name||stage.owner:"—"}</div></div>
-      <div class="detail-field"><div class="df-label">Space</div><div class="df-val"><span class="space-banner space-banner-${sp}" style="background:${SPACE_COLORS[sp]}22;color:${SPACE_COLORS[sp]};font-size:11px;padding:2px 8px;border-radius:10px">${SPACES[sp]?.label||sp}</span></div></div>
+      <div class="detail-field"><div class="df-label">Space</div><div class="df-val"><span class="space-banner space-banner-${sp}" style="background:${(SPACE_COLORS[sp]||SPACES[sp]?.color||'#3b7dd8')}22;color:${SPACE_COLORS[sp]||SPACES[sp]?.color||'#3b7dd8'};font-size:11px;padding:2px 8px;border-radius:10px">${SPACES[sp]?.label||sp}</span></div></div>
       <div class="detail-field"><div class="df-label">Due date</div><div class="df-val">${p.due?formatDate(p.due):"—"}</div></div>
       ${(()=>{const pf=getProjectFiles(p);if(!pf.length)return"";if(pf.length===1)return`<div class="detail-field"><div class="df-label">File</div><div class="df-val"><button class="file-open-btn" onclick="viewFile('${p.id}',0)">Open ${pf[0].fileName}</button></div></div>`;return`<div class="detail-field full"><div class="df-label">Files (${pf.length})</div><div class="df-val" style="display:flex;gap:8px;flex-wrap:wrap">${pf.map((f,i)=>{if(f.fileType?.includes("image"))return`<img src="${f.fileUrl||f.fileData}" onclick="viewFile('${p.id}',${i})" style="width:56px;height:56px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border)" title="${f.fileName}"/>`;return`<button class="file-open-btn" onclick="viewFile('${p.id}',${i})">${f.fileType?.includes("pdf")?"📄":"📝"} ${f.fileName}</button>`}).join("")}</div></div>`;})()}
       ${normaliseLinkData(p).length ? `<div class="detail-field full"><div class="df-label">Links</div>
