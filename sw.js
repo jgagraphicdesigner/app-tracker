@@ -1,4 +1,4 @@
-const CACHE_NAME = "app-tracker-20260422-v56";
+const CACHE_NAME = "app-tracker-20260422-v57";
 
 // Files to cache for offline fallback
 const PRECACHE = [

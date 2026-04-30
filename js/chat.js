@@ -4,25 +4,40 @@ import {
   saveCustomGroup, deleteCustomGroup, subscribeCustomGroups,
   updateGroupMembers, getGroupData,
   setPresence, subscribePresence,
-  markRoomRead, incrementUnread, subscribeUnread
+  markRoomRead, incrementUnread, subscribeUnread,
+  subscribeCustomSpaces, subscribeSpaceConfigs
 } from "./firebase.js";
 import { notifyUser } from "./notify.js";
 import { uploadChatImage } from "./storage.js";
 import {
   authGuard, getCurrentSpace, setupSidebar, setupNotifBadge,
-  initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS, timeAgo, setCurrentSpace
+  initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS, timeAgo, setCurrentSpace,
+  BASE_SPACES, getCachedSpaces, cacheSpaces, mergeCustomSpaces, mergeSpaceConfig
 } from "./helpers.js";
 import { renderSidebar, renderBottomNav } from "./sidebar.js";
 
 const CURRENT_USER = authGuard();
 if (!CURRENT_USER) throw new Error("not auth");
 
-document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("chat", getCurrentSpace()));
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("chat", getCurrentSpace(), getCachedSpaces()));
 document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("chat"));
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);
 initTheme(); updateThemeBtn(localStorage.getItem("theme") || "light");
 window.toggleTheme    = toggleTheme;
+
+// Keep sidebar in sync with custom spaces + space config overrides
+let _sidebarCustoms = {};
+let _sidebarConfigs = {};
+function _refreshPageSidebar() {
+  const sb = document.getElementById("sidebar"); if (!sb) return;
+  const merged = mergeSpaceConfig(_sidebarConfigs, mergeCustomSpaces(_sidebarCustoms, BASE_SPACES));
+  cacheSpaces(merged);
+  sb.outerHTML = renderSidebar("chat", getCurrentSpace(), merged);
+  setupSidebar(CURRENT_USER);
+}
+subscribeCustomSpaces(_cs => { _sidebarCustoms = _cs; _refreshPageSidebar(); });
+subscribeSpaceConfigs(_cfg => { _sidebarConfigs = _cfg; _refreshPageSidebar(); });
 window.doLogout       = () => { sessionStorage.clear(); window.location.href = "../index.html"; };
 window.switchSpace    = s  => { setCurrentSpace(s); location.href = "dashboard.html"; };
 window.openNewProject = () => { location.href = "dashboard.html"; };

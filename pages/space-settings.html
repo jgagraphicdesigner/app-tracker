@@ -599,31 +599,7 @@ function showAlert(msg, success, sub = "") {
 }
 
 // ── Update sidebar space label + dot live ─────────────────────────────────
-function updateSidebarSpace(sid, label, color) {
-  const item = document.querySelector(`.space-nav-item[data-space="${sid}"]`);
-  if (!item) return;
-  // Update text node (last child) — keep the dot span intact
-  const textNode = [...item.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
-  if (textNode) textNode.textContent = `\n      ${label}\n    `;
-  else item.lastChild.textContent = label; // fallback
-  // Update dot colour
-  const dot = item.querySelector(".space-dot");
-  if (dot && color) dot.style.background = color;
-}
-
-load().then(() => {
-  // Live-subscribe so sidebar stays in sync if another tab also makes changes
-  subscribeSpaceConfigs(configs => {
-    Object.entries(configs).forEach(([sid, cfg]) => {
-      if (cfg.label) updateSidebarSpace(sid, cfg.label, cfg.color);
-    });
-  });
-  subscribeCustomSpaces(customs => {
-    Object.entries(customs).forEach(([sid, cs]) => {
-      updateSidebarSpace(sid, cs.label, cs.color);
-    });
-  });
-});
+load(); // sidebar updates handled by _refreshPageSidebar subscriptions above
 </script>
 
 <script>
