@@ -489,7 +489,7 @@
 <div class="eb-toast" id="ebToast"></div>
 
 <script type="module">
-import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, setCurrentSpace , mergeCustomSpaces, BASE_SPACES} from "../js/helpers.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, setCurrentSpace , mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES} from "../js/helpers.js"
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
@@ -499,12 +499,17 @@ document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav(
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);
 // Keep sidebar spaces list in sync with custom spaces
-subscribeCustomSpaces(_cs => {
-  const _sb = document.getElementById("sidebar"); if (!_sb) return;
-  const _merged = mergeCustomSpaces(_cs, BASE_SPACES);
-  _sb.outerHTML = renderSidebar("email-builder", getCurrentSpace(), _merged);
+// Keep sidebar in sync with both custom spaces AND space config overrides
+let _sidebarCustoms = {};
+let _sidebarConfigs = {};
+function _refreshPageSidebar() {
+  const sb = document.getElementById("sidebar"); if (!sb) return;
+  const merged = mergeSpaceConfig(_sidebarConfigs, mergeCustomSpaces(_sidebarCustoms, BASE_SPACES));
+  sb.outerHTML = renderSidebar("email-builder", getCurrentSpace(), merged);
   setupSidebar(CURRENT_USER);
-});
+}
+subscribeCustomSpaces(_cs => { _sidebarCustoms = _cs; _refreshPageSidebar(); });
+subscribeSpaceConfigs(_cfg => { _sidebarConfigs = _cfg; _refreshPageSidebar(); });
 initTheme(); updateThemeBtn(localStorage.getItem("theme") || "light");
 window.toggleTheme    = toggleTheme;
 window.doLogout       = () => { sessionStorage.clear(); window.location.href = "../index.html"; };

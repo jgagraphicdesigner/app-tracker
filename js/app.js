@@ -2693,11 +2693,29 @@ async function init() {
   // apply, so custom spaces appear on every page load without user interaction.
   subscribeSpaceConfigs(configs => {
     _latestSpaceConfigs = configs;
+
+    // Fast path: apply config overrides to SPACES immediately so labels/colors
+    // update in sidebar without waiting for the full board rebuild.
+    const quickWithConfig = mergeSpaceConfig(configs, { ...SPACES });
+    Object.keys(SPACES).forEach(k => delete SPACES[k]);
+    Object.assign(SPACES, quickWithConfig);
+    fvRefreshSidebar();
+
     applyAllSpaceData();
   });
 
   subscribeCustomSpaces(customs => {
     _latestCustomSpaces = customs;
+
+    // ── Fast path: update SPACES and sidebar IMMEDIATELY ──────────────────
+    // Do this BEFORE applyAllSpaceData (which rebuilds the whole board) so
+    // the sidebar reflects custom spaces the instant Firebase responds.
+    const quickMerged = mergeCustomSpaces(customs, { ...BASE_SPACES });
+    Object.keys(SPACES).forEach(k => delete SPACES[k]);
+    Object.assign(SPACES, quickMerged);
+    cacheSpaces(quickMerged);       // persist so next load is instant
+    fvRefreshSidebar();             // sidebar updated NOW — no board rebuild needed
+
     // Subscribe to projects in each custom space
     Object.keys(customs).forEach(sid => {
       if (!projectsBySpace[sid]) {
@@ -2708,6 +2726,8 @@ async function init() {
         });
       }
     });
+
+    // Full apply (applies spaceConfig overrides, rebuilds board UI)
     applyAllSpaceData();
   });
 
