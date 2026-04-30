@@ -57,7 +57,7 @@
 
 <script type="module">
 import { getAllUsers, createUser, saveUserProfile, setPresence, subscribePresence , subscribeCustomSpaces } from "../js/firebase.js"
-import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS, isAdminUser, loadAdminStatus , mergeCustomSpaces, BASE_SPACES} from "../js/helpers.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS, isAdminUser, loadAdminStatus, mergeCustomSpaces, BASE_SPACES, cacheUsers } from "../js/helpers.js"
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
@@ -177,6 +177,7 @@ window.addPerson = async function() {
   ["new-name","new-uid","new-role","new-pin","new-email"].forEach(id => document.getElementById(id).value = "");
   // Update local cache and re-render grid — no full Firebase reload needed
   _mergedUsers[uid] = newUser;
+  cacheUsers({ ..._mergedUsers }); // update cache so login + @mentions see new user instantly
   renderPeopleGrid();
   updatePresenceDots();
 

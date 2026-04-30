@@ -1,5 +1,5 @@
 import { verifyPin, getAllUsers, getUserProfile } from "./firebase.js";
-import { DEFAULT_USERS } from "./helpers.js";
+import { DEFAULT_USERS, getCachedUsers, cacheUsers } from "./helpers.js";
 
 let selectedUser = null;
 
@@ -19,17 +19,20 @@ function renderMemberGrid(all) {
 }
 
 async function loadMemberGrid() {
-  // Step 1: Render DEFAULT_USERS immediately — no wait, no flash
-  renderMemberGrid({ ...DEFAULT_USERS });
+  // Step 1: Render from localStorage cache instantly (includes previously added users)
+  const cached = getCachedUsers();
+  const initial = cached ? { ...DEFAULT_USERS, ...cached } : { ...DEFAULT_USERS };
+  renderMemberGrid(initial);
 
-  // Step 2: Fetch Firebase users and merge — new members appear without reload
+  // Step 2: Fetch fresh Firebase users — update display and persist cache
   try {
     const stored = await getAllUsers();
     const all = { ...DEFAULT_USERS };
     Object.entries(stored).forEach(([k,v]) => { if (!all[k]) all[k] = v; else all[k] = {...all[k],...v}; });
+    cacheUsers(all); // persist so next load is instant
     renderMemberGrid(all);
   } catch(e) {
-    console.warn("[Login] Could not load Firebase users, using defaults:", e);
+    console.warn("[Login] Could not load Firebase users, using cached/defaults:", e);
   }
 }
 loadMemberGrid();

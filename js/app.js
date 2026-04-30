@@ -12,13 +12,19 @@ import {
   SPACES, BASE_SPACES, DEFAULT_USERS, STATUS_LIST, statusClass, priorityClass, PRIORITY_LEVELS,
   formatDate, timeAgo, authGuard, getCurrentSpace, setCurrentSpace,
   setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme,
-  mergeSpaceConfig, mergeCustomSpaces
+  mergeSpaceConfig, mergeCustomSpaces,
+  isAdminUser, loadAdminStatus,
+  cacheSpaces, cacheUsers, getCachedUsers
 } from "./helpers.js";
 import { renderSidebar, renderBottomNav } from "./sidebar.js";
 
 const CURRENT_USER = authGuard();
 if (!CURRENT_USER) throw new Error("not auth");
 const u_obj = DEFAULT_USERS[CURRENT_USER] || { name: CURRENT_USER, av: "?", cls: "av-jc" };
+
+// ALL_USERS — merged DEFAULT_USERS + Firebase users, used for @mentions
+// Pre-populated from localStorage so @mentions work instantly on load
+let ALL_USERS = { ...DEFAULT_USERS, ...(getCachedUsers() || {}) };
 
 document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("dashboard", getCurrentSpace(), SPACES));
 document.querySelector(".main")?.insertAdjacentHTML("beforeend", renderBottomNav("dashboard"));
@@ -146,7 +152,7 @@ window.handleNotesMention = function(e) {
   if (atIdx !== -1 && (atIdx === 0 || /\s/.test(before[atIdx-1]))) {
     const query  = before.slice(atIdx + 1).toLowerCase();
     _notesMentionStart = atIdx;
-    const matches = Object.entries(DEFAULT_USERS).filter(([uid, u]) => {
+    const matches = Object.entries(ALL_USERS).filter(([uid, u]) => {
       const name = (u.name || uid).toLowerCase();
       return query === "" || name.includes(query) || uid.includes(query);
     });
@@ -154,8 +160,8 @@ window.handleNotesMention = function(e) {
     _notesMentionIdx = 0;
     popup.innerHTML = matches.map(([uid, u], i) => `
       <div class="mention-item ${i===0?"active":""}" data-uid="${uid}" onclick="insertNotesMention('${uid}')">
-        <div class="av av-sm ${u.cls||'av-jc'}">${u.av}</div>
-        <div><div class="mention-name">${u.name}</div><div class="mention-role">${u.role}</div></div>
+        <div class="av av-sm ${u.cls||'av-jc'}">${u.av||uid.slice(0,2).toUpperCase()}</div>
+        <div><div class="mention-name">${u.name||uid}</div><div class="mention-role">${u.role||'Team member'}</div></div>
       </div>`).join("");
     popup.style.display = "block";
   } else {
@@ -177,7 +183,7 @@ window.insertNotesMention = function(uid) {
   const ta   = document.getElementById("f-notes"); if (!ta) return;
   const val  = ta.value;
   const pos  = ta.selectionStart;
-  const u    = DEFAULT_USERS[uid] || { name: uid };
+  const u    = ALL_USERS[uid] || { name: uid };
   const before = val.slice(0, _notesMentionStart);
   const after  = val.slice(pos);
   ta.value   = before + "@" + uid + " " + after;
@@ -1031,13 +1037,13 @@ window.fvHandleMention = function(e) {
   if (!popup) return;
   if (atIdx !== -1 && (atIdx === 0 || /\s/.test(before[atIdx-1]))) {
     const query = before.slice(atIdx+1).toLowerCase();
-    const matches = Object.entries(DEFAULT_USERS).filter(([uid,u]) =>
+    const matches = Object.entries(ALL_USERS).filter(([uid,u]) =>
       query==='' || (u.name||uid).toLowerCase().includes(query) || uid.includes(query));
     if (!matches.length) { popup.style.display='none'; return; }
     popup.innerHTML = matches.map(([uid,u],i) =>
       `<div class="mention-item ${i===0?'active':''}" data-uid="${uid}" onmousedown="event.preventDefault();fvInsertMention(event,'${uid}')">
-        <div class="av av-sm ${u.cls||'av-jc'}" style="width:20px;height:20px;font-size:8px;font-weight:700">${u.av}</div>
-        <div><div class="mention-name">${u.name}</div><div class="mention-role">${u.role}</div></div>
+        <div class="av av-sm ${u.cls||'av-jc'}" style="width:20px;height:20px;font-size:8px;font-weight:700">${u.av||uid.slice(0,2).toUpperCase()}</div>
+        <div><div class="mention-name">${u.name||uid}</div><div class="mention-role">${u.role||'Team member'}</div></div>
       </div>`).join('');
     popup.style.display = 'block';
   } else {
@@ -1069,7 +1075,7 @@ window.fvMentionKey = function(e) {
 
 function fvFormatText(text) {
   return (text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/@(\w+)/g, (m,uid) => DEFAULT_USERS[uid] ? `<span class="fv-mention">@${DEFAULT_USERS[uid].name}</span>` : m);
+    .replace(/@(\w+)/g, (m,uid) => ALL_USERS[uid] ? `<span class="fv-mention">@${ALL_USERS[uid].name}</span>` : m);
 }
 
 // ── Main render ────────────────────────────────────────────────────────────
@@ -2618,6 +2624,16 @@ async function init() {
   buildFilterButtons();
   updateSpaceBanner();
 
+  // Fetch Firebase users in background — update ALL_USERS and cache for @mentions
+  getAllUsers().then(stored => {
+    const merged = { ...DEFAULT_USERS };
+    Object.entries(stored).forEach(([k,v]) => { merged[k] = { ...(merged[k]||{}), ...v }; });
+    // Update in-place so existing references to ALL_USERS see new users
+    Object.assign(ALL_USERS, merged);
+    // Persist for instant next load
+    cacheUsers(merged);
+  }).catch(() => {});
+
   // Subscribe to space config overrides (name/owner edits from settings)
   // ── Space config + custom spaces — always applied together ──────────────
   // Keeping both pieces of state in sync prevents the race where one
@@ -2659,6 +2675,9 @@ async function init() {
     // Step 5: replace SPACES in place — keeps existing object reference
     Object.keys(SPACES).forEach(k => delete SPACES[k]);
     Object.assign(SPACES, withCustom);
+
+    // Step 5b: persist to localStorage so next page load renders instantly
+    cacheSpaces(withCustom);
 
     // Step 6: rebuild all board UI that reads from SPACES
     fvRefreshSidebar();

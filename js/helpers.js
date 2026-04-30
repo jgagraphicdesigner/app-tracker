@@ -42,8 +42,38 @@ export const BASE_SPACES = {
   }
 };
 
+// ── Persistent cache keys ────────────────────────────────────────────────
+const CACHE_KEY_SPACES = 'app_spaces_cache';
+const CACHE_KEY_USERS  = 'app_users_cache';
+
+// Write spaces to localStorage so next page load is instant
+export function cacheSpaces(spacesObj) {
+  try { localStorage.setItem(CACHE_KEY_SPACES, JSON.stringify(spacesObj)); } catch(e) {}
+}
+// Write merged users to localStorage
+export function cacheUsers(usersObj) {
+  try { localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(usersObj)); } catch(e) {}
+}
+// Read cached spaces synchronously (returns BASE_SPACES if nothing cached)
+export function getCachedSpaces() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_SPACES);
+    if (raw) return { ...BASE_SPACES, ...JSON.parse(raw) };
+  } catch(e) {}
+  return { ...BASE_SPACES };
+}
+// Read cached users synchronously (returns DEFAULT_USERS if nothing cached)
+export function getCachedUsers() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_USERS);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
 // Merged SPACES — base + any overrides from Firebase config
-export let SPACES = { ...BASE_SPACES };
+// Pre-populated from localStorage cache so first render is instant
+export let SPACES = getCachedSpaces();
 
 // Live space registry (base + custom, with config overrides)
 export let ALL_SPACES = { ...BASE_SPACES };
