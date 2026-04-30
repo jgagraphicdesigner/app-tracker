@@ -22,10 +22,14 @@
       <button class="hamburger" onclick="openSidebar()"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
       <div class="topbar-title">Notifications</div>
     </div>
-    <div class="topbar-right"><button class="btn-ghost" onclick="clearAll()" style="font-size:12px">Clear all</button></div>
+    <div class="topbar-right" style="gap:8px">
+      <span id="npiUnreadBadge" class="npi-badge npi-badge-unread" style="display:none"></span>
+      <button class="btn-ghost" onclick="markAllRead()" style="font-size:12px">Mark all read</button>
+      <button class="btn-ghost" onclick="clearAll()" style="font-size:12px;color:var(--rev-fg)">Clear all</button>
+    </div>
   </div>
-  <div class="page-content">
-    <div style="max-width:640px"><div id="notifPageList"><p style="color:var(--text-3);font-size:13px">Loading...</p></div></div>
+  <div class="page-content" style="padding:20px 24px">
+    <div style="max-width:660px;margin:0 auto"><div id="notifPageList"><p style="color:var(--text-3);font-size:13px;text-align:center;padding:3rem">Loading…</p></div></div>
   </div>
 </div>
 </div>
@@ -59,29 +63,124 @@ window.doLogout = () => { sessionStorage.clear(); window.location.href = "../ind
 window.switchSpace = s => {};
 window.clearAll = async () => { await clearNotifications(CURRENT_USER); };
 
+// ── Notification type config ──────────────────────────────────────────────
+const NOTIF_CONFIG = {
+  mention:   { icon:"🏷",  label:"Mention",     color:"#7c5cbf", bg:"rgba(124,92,191,.1)"  },
+  dm:        { icon:"💬",  label:"Message",     color:"#3b7dd8", bg:"rgba(59,125,216,.1)"  },
+  stage:     { icon:"📋",  label:"Task",        color:"#2aab6f", bg:"rgba(42,171,111,.1)"  },
+  new_task:  { icon:"🆕",  label:"New task",    color:"#e0a030", bg:"rgba(224,160,48,.1)"  },
+  published: { icon:"✅",  label:"Published",   color:"#2aab6f", bg:"rgba(42,171,111,.1)"  },
+  general:   { icon:"🔔",  label:"Notice",      color:"#888",    bg:"rgba(136,136,136,.08)" },
+};
+
+function groupByDate(notifs) {
+  const today     = new Date(); today.setHours(0,0,0,0);
+  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
+  const week      = new Date(today); week.setDate(today.getDate()-7);
+  const groups    = { Today:[], Yesterday:[], "This week":[], Older:[] };
+  notifs.forEach(n => {
+    const d = new Date(n.timestamp); d.setHours(0,0,0,0);
+    if (d >= today)     groups["Today"].push(n);
+    else if (d >= yesterday) groups["Yesterday"].push(n);
+    else if (d >= week) groups["This week"].push(n);
+    else                groups["Older"].push(n);
+  });
+  return groups;
+}
+
+function renderNotifCard(n) {
+  const cfg = NOTIF_CONFIG[n.type] || NOTIF_CONFIG.general;
+  const unread = !n.read;
+  // Action button
+  let actionBtn = "";
+  if ((n.type === "stage" || n.type === "new_task") && n.projectId)
+    actionBtn = `<button class="npi-action" onclick="event.stopPropagation();goToTask('${n.projectId}','${n.space||'email'}')">View task →</button>`;
+  else if (n.type === "mention" && n.projectId)
+    actionBtn = `<button class="npi-action" onclick="event.stopPropagation();goToTask('${n.projectId}','${n.space||'email'}')">View task →</button>`;
+  else if (n.type === "dm" && n.roomId)
+    actionBtn = `<button class="npi-action" onclick="event.stopPropagation();location.href='chat.html'">Open chat →</button>`;
+
+  return `
+  <div class="npi-card ${unread ? 'npi-unread' : ''}" onclick="markRead('${n.id}')"
+       style="--npi-color:${cfg.color};--npi-bg:${cfg.bg}">
+    ${unread ? '<span class="npi-dot"></span>' : ''}
+    <div class="npi-icon-wrap" style="background:${cfg.bg}">
+      <span style="font-size:18px;line-height:1">${cfg.icon}</span>
+    </div>
+    <div class="npi-body">
+      <div class="npi-type-label" style="color:${cfg.color}">${cfg.label}</div>
+      <div class="npi-title">${n.title}</div>
+      ${n.message ? `<div class="npi-sub">${n.message}</div>` : ""}
+      <div class="npi-footer">
+        <span class="npi-time">${timeAgo(n.timestamp)}</span>
+        ${actionBtn}
+      </div>
+    </div>
+  </div>`;
+}
+
 let _lastNotifKey = "";
+let _allNotifs    = [];
+
 subscribeNotifications(CURRENT_USER, notifs => {
-  // Key on IDs + read states — skip full rebuild if nothing meaningful changed
-  const key = notifs.map(n => n.id + (n.read ? "r" : "u")).join(",");
+  const key = notifs.map(n => n.id + (n.read?"r":"u")).join(",");
   if (key === _lastNotifKey) return;
   _lastNotifKey = key;
-
-  const list = document.getElementById("notifPageList");
-  if (!notifs.length) { list.innerHTML = `<p style="color:var(--text-3);font-size:13px">No notifications yet.</p>`; return; }
-  list.innerHTML = `<div class="notif-page-list">${notifs.map(n => {
-    const icon = n.type==="mention"?"🏷":n.type==="dm"?"💬":n.type==="stage"?"📋":"🔔";
-    return `<div class="notif-page-item ${n.read?"":"unread"}" onclick="readNotif('${n.id}')">
-      <div style="font-size:16px;flex-shrink:0">${icon}</div>
-      <div style="flex:1"><div class="npi-title">${n.title}</div><div class="npi-sub">${n.message||""}</div></div>
-      <div class="npi-time">${timeAgo(n.timestamp)}</div>
-    </div>`;
-  }).join("")}</div>`;
+  _allNotifs = notifs;
+  renderNotifPage(notifs);
 });
 
-window.readNotif = async id => {
+function renderNotifPage(notifs) {
+  const list    = document.getElementById("notifPageList");
+  const unreadN = notifs.filter(n => !n.read).length;
+
+  if (!notifs.length) {
+    list.innerHTML = `
+      <div class="npi-empty">
+        <div style="font-size:48px;margin-bottom:12px">🔔</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text-1)">You're all caught up</div>
+        <div style="font-size:13px;color:var(--text-3);margin-top:4px">No notifications yet</div>
+      </div>`;
+    return;
+  }
+
+  // Update header badge
+  const badge = document.getElementById("npiUnreadBadge");
+  if (badge) {
+    badge.textContent = unreadN > 0 ? `${unreadN} unread` : "All read";
+    badge.className   = unreadN > 0 ? "npi-badge npi-badge-unread" : "npi-badge npi-badge-read";
+  }
+
+  const groups = groupByDate(notifs);
+  let html = "";
+  for (const [label, items] of Object.entries(groups)) {
+    if (!items.length) continue;
+    html += `<div class="npi-group-label">${label}</div>
+             <div class="npi-group">${items.map(renderNotifCard).join("")}</div>`;
+  }
+  list.innerHTML = html;
+}
+
+window.markRead = async function(id) {
   await markNotifRead(CURRENT_USER, id);
+  // Update locally without waiting for Firebase re-render
+  const card = document.querySelector(`.npi-card[onclick*="${id}"]`);
+  if (card) { card.classList.remove("npi-unread"); card.querySelector(".npi-dot")?.remove(); }
+};
+
+window.markAllRead = async function() {
+  const unread = _allNotifs.filter(n => !n.read);
+  await Promise.all(unread.map(n => markNotifRead(CURRENT_USER, n.id)));
+};
+
+window.goToTask = function(projectId, space) {
+  sessionStorage.setItem("highlightProject", projectId);
+  sessionStorage.setItem("app_space", space);
   location.href = "dashboard.html";
 };
+
+// Legacy compat
+window.readNotif = id => window.markRead(id);
 </script>
 <script>
 function openSidebar()  { document.getElementById("sidebar").classList.add("mobile-open"); document.getElementById("sidebarOverlay").classList.add("visible"); document.body.style.overflow="hidden"; }
