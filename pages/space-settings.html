@@ -220,7 +220,7 @@ import {
   subscribeSpaceConfigs, subscribeCustomSpaces
 } from "../js/firebase.js";
 import {
-  BASE_SPACES, DEFAULT_USERS,
+  BASE_SPACES, getCachedSpaces, DEFAULT_USERS,
   authGuard, getCurrentSpace, setCurrentSpace,
   setupSidebar, setupNotifBadge,
   initTheme, updateThemeBtn, toggleTheme,
@@ -231,7 +231,7 @@ import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 const CURRENT_USER = authGuard();
 if (!CURRENT_USER) throw new Error("not auth");
 
-document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("space-settings", getCurrentSpace()));
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("space-settings", getCurrentSpace(), getCachedSpaces()));
 document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("space-settings"));
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);

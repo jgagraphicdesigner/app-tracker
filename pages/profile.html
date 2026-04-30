@@ -77,12 +77,12 @@
 </div>
 <script type="module">
 import { getUserProfile, saveUserProfile, updatePin , subscribeSpaceConfigs, subscribeCustomSpaces } from "../js/firebase.js"
-import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS , mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES} from "../js/helpers.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, DEFAULT_USERS , mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES, getCachedSpaces} from "../js/helpers.js"
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
 if (!CURRENT_USER) throw new Error("not auth");
-document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("profile", getCurrentSpace()));
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("profile", getCurrentSpace(), getCachedSpaces()));
 document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("profile"));
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);

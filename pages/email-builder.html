@@ -489,12 +489,12 @@
 <div class="eb-toast" id="ebToast"></div>
 
 <script type="module">
-import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, setCurrentSpace , mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES} from "../js/helpers.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, setCurrentSpace , mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES, getCachedSpaces} from "../js/helpers.js"
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
 if (!CURRENT_USER) throw new Error("not auth");
-document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("email-builder", getCurrentSpace()));
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("email-builder", getCurrentSpace(), getCachedSpaces()));
 document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("email-builder"));
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);

@@ -58,7 +58,7 @@
 
 <script type="module">
 import { subscribeProjects, subscribeNotifications, markNotifRead, clearNotifications, setPresence, subscribePresence, getAllUsers, subscribeSpaceConfigs, subscribeCustomSpaces } from "../js/firebase.js";
-import { DEFAULT_USERS, BASE_SPACES, statusClass, priorityClass, formatDate, timeAgo, authGuard, getCurrentSpace, setCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, mergeSpaceConfig, mergeCustomSpaces } from "../js/helpers.js";
+import { DEFAULT_USERS, BASE_SPACES, getCachedSpaces, statusClass, priorityClass, formatDate, timeAgo, authGuard, getCurrentSpace, setCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, mergeSpaceConfig, mergeCustomSpaces } from "../js/helpers.js";
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
@@ -69,7 +69,7 @@ function isOnline(uid) {
 }
 if (!CURRENT_USER) throw new Error("not auth");
 
-document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("main-dashboard", getCurrentSpace()));
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("main-dashboard", getCurrentSpace(), getCachedSpaces()));
 document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("main-dashboard"));
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);

@@ -31,12 +31,12 @@
 </div>
 <script type="module">
 import { subscribeNotifications, markNotifRead, clearNotifications , subscribeSpaceConfigs, subscribeCustomSpaces } from "../js/firebase.js"
-import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, timeAgo , mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES} from "../js/helpers.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, timeAgo , mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES, getCachedSpaces} from "../js/helpers.js"
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
 if (!CURRENT_USER) throw new Error("not auth");
-document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("notifications", getCurrentSpace()));
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("notifications", getCurrentSpace(), getCachedSpaces()));
 document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("notifications"));
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);
