@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
+<meta name="theme-color" content="#2a1a3a"/>
+  <link rel="manifest" href="../manifest.json"/>
+  <link rel="apple-touch-icon" href="../assets/icon-192.png"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="APP Tracker"/>
+<title>APP Project Management — Space Settings</title>
+<link rel="stylesheet" href="../css/main.css"/>
+<script>const t=localStorage.getItem("theme")||"light";document.documentElement.setAttribute("data-theme",t);</script>
+<style>
+/* ── Multi-person picker ─────────────────────────────────── */
+.people-picker {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.people-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  min-height: 34px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-1);
+  transition: border-color .15s;
+}
+.people-selected:hover,
+.people-selected:focus-within { border-color: var(--accent); }
+.people-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(124,92,191,.12);
+  color: var(--accent, #7c5cbf);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.people-tag-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  color: inherit;
+  opacity: .6;
+  font-size: 13px;
+}
+.people-tag-remove:hover { opacity: 1; }
+.people-placeholder { color: var(--text-3); font-size: 12px; }
+.people-dropdown {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 18px rgba(0,0,0,.12);
+  z-index: 200;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.people-dropdown.open { display: block; }
+.people-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-1);
+  transition: background .1s;
+}
+.people-option:hover { background: rgba(0,0,0,.04); }
+.people-option.selected { background: rgba(124,92,191,.08); }
+.people-option .check {
+  margin-left: auto;
+  color: var(--accent, #7c5cbf);
+  font-size: 13px;
+  opacity: 0;
+}
+.people-option.selected .check { opacity: 1; }
+.av.av-xs {
+  width: 20px; height: 20px;
+  font-size: 9px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* ── Centre-screen toast ─────────────────────────────────── */
+#toast {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(.85);
+  z-index: 9999;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 48px rgba(0,0,0,.22);
+  padding: 22px 32px;
+  min-width: 240px;
+  max-width: 340px;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s ease, transform .2s ease;
+}
+#toast.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+}
+#toast .toast-icon {
+  font-size: 32px;
+  line-height: 1;
+  margin-bottom: 10px;
+}
+#toast .toast-msg {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 4px;
+}
+#toast .toast-sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+#toast.toast-error .toast-icon::before { content: "✕"; color: #e05a3a; }
+#toast.toast-success .toast-icon::before { content: "✓"; color: #2aab6f; }
+</style>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" onclick="openSidebar()">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+      <div class="topbar-title">Space Settings</div>
+    </div>
+  </div>
+  <div class="page-content">
+    <div id="settingsBody" style="max-width:700px">
+      <p style="color:var(--text-3);font-size:13px">Loading...</p>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- Centre toast -->
+<div id="toast">
+  <div class="toast-icon"></div>
+  <div class="toast-msg" id="toastMsg"></div>
+  <div class="toast-sub" id="toastSub"></div>
+</div>
+
+<!-- Add Space Modal -->
+<div class="modal-overlay" id="addSpaceModal" onclick="if(event.target.id==='addSpaceModal')closeAddSpace()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Add new space</h3>
+      <button class="modal-close" onclick="closeAddSpace()">
+        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field-row">
+        <label class="field-label">Space name *</label>
+        <input type="text" id="ns-name" class="field-input" placeholder="e.g. Social Media"/>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Colour</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="colorGroup">
+          <button class="seg-btn active" data-val="#7c5cbf" onclick="setSeg(this,'colorGroup')" style="background:#7c5cbf;color:white;border-color:#7c5cbf">Purple</button>
+          <button class="seg-btn" data-val="#3b7dd8" onclick="setSeg(this,'colorGroup')" style="background:#3b7dd8;color:white;border-color:#3b7dd8">Blue</button>
+          <button class="seg-btn" data-val="#2aab6f" onclick="setSeg(this,'colorGroup')" style="background:#2aab6f;color:white;border-color:#2aab6f">Green</button>
+          <button class="seg-btn" data-val="#e0694a" onclick="setSeg(this,'colorGroup')" style="background:#e0694a;color:white;border-color:#e0694a">Orange</button>
+          <button class="seg-btn" data-val="#e0a030" onclick="setSeg(this,'colorGroup')" style="background:#e0a030;color:white;border-color:#e0a030">Amber</button>
+          <button class="seg-btn" data-val="#c060c8" onclick="setSeg(this,'colorGroup')" style="background:#c060c8;color:white;border-color:#c060c8">Pink</button>
+        </div>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Types (comma separated)</label>
+        <input type="text" id="ns-types" class="field-input" placeholder="e.g. Post, Story, Reel"/>
+      </div>
+      <div id="nsError" class="alert alert-error" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeAddSpace()">Cancel</button>
+      <button class="btn-primary" onclick="saveNewSpace()" style="width:auto;height:auto;padding:8px 16px;border-radius:var(--radius-sm)">Create space</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import {
+  saveSpaceConfig, getSpaceConfig, getAllUsers,
+  saveCustomSpace, deleteCustomSpace, getCustomSpaces,
+  subscribeSpaceConfigs, subscribeCustomSpaces
+} from "../js/firebase.js";
+import {
+  BASE_SPACES, DEFAULT_USERS,
+  authGuard, getCurrentSpace, setCurrentSpace,
+  setupSidebar, setupNotifBadge,
+  initTheme, updateThemeBtn, toggleTheme,
+  isAdminUser, loadAdminStatus
+, mergeCustomSpaces } from "../js/helpers.js"
+import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
+
+const CURRENT_USER = authGuard();
+if (!CURRENT_USER) throw new Error("not auth");
+
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("space-settings", getCurrentSpace()));
+document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("space-settings"));
+setupSidebar(CURRENT_USER);
+setupNotifBadge(CURRENT_USER);
+// Keep sidebar spaces list in sync with custom spaces
+subscribeCustomSpaces(_cs => {
+  const _sb = document.getElementById("sidebar"); if (!_sb) return;
+  const _merged = mergeCustomSpaces(_cs, {});
+  _sb.outerHTML = renderSidebar("space-settings", getCurrentSpace(), _merged);
+  setupSidebar(CURRENT_USER);
+});
+initTheme(); updateThemeBtn(localStorage.getItem("theme") || "light");
+window.toggleTheme  = toggleTheme;
+window.doLogout     = () => { sessionStorage.clear(); window.location.href = "../index.html"; };
+window.switchSpace  = s  => { setCurrentSpace(s); location.href = "dashboard.html"; };
+window.openNewProject = () => { location.href = "dashboard.html"; };
+window.openAddSpaceModal = () => document.getElementById("addSpaceModal").classList.add("open");
+
+let allUsers     = { ...DEFAULT_USERS };
+let customSpaces = {};
+// BUG FIX: Store saved configs so the page loads persisted values, not defaults
+let savedConfigs = {};
+
+// ── Load ─────────────────────────────────────────────────────────────────
+async function load() {
+  // Admin gate — only admins can access space settings
+  await loadAdminStatus(CURRENT_USER);
+  if (!isAdminUser(CURRENT_USER)) {
+    document.getElementById("settingsBody").innerHTML = `
+      <div style="text-align:center;padding:3rem;color:var(--text-3)">
+        <div style="font-size:40px;margin-bottom:12px">🔒</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text-1)">Admin access only</div>
+        <div style="font-size:13px;margin-top:6px">Only admins can manage spaces. Ask JC to grant you access.</div>
+      </div>`;
+    return;
+  }
+  const [stored, cs] = await Promise.all([getAllUsers(), getCustomSpaces()]);
+  Object.entries(stored).forEach(([k,v]) => {
+    allUsers[k] = { ...(allUsers[k] || {}), ...v };
+  });
+  customSpaces = cs || {};
+
+  // BUG FIX: Fetch saved configs for ALL spaces (base + custom) so edits survive reload
+  const allIds = [...Object.keys(BASE_SPACES), ...Object.keys(customSpaces)];
+  const cfgResults = await Promise.all(allIds.map(id => getSpaceConfig(id)));
+  allIds.forEach((id, i) => {
+    if (cfgResults[i]) savedConfigs[id] = cfgResults[i];
+  });
+
+  renderSettings();
+}
+
+// ── Apply saved config over a space definition ────────────────────────────
+function applyConfig(sid, sp) {
+  const cfg = savedConfigs[sid];
+  if (!cfg) return sp;
+  const merged = JSON.parse(JSON.stringify(sp));
+  if (cfg.label)  merged.label  = cfg.label;
+  if (cfg.color)  merged.color  = cfg.color;
+  if (cfg.stages) merged.stages = cfg.stages; // full replacement — not partial merge
+  return merged;
+}
+
+// ── Render settings body ──────────────────────────────────────────────────
+function renderSettings() {
+  const body = document.getElementById("settingsBody");
+  const baseEntries   = Object.entries(BASE_SPACES);
+  const customEntries = Object.entries(customSpaces);
+
+  body.innerHTML = `
+    <div style="font-size:13px;font-weight:600;color:var(--text-1);margin-bottom:12px">Built-in spaces</div>
+    ${baseEntries.map(([sid, sp]) => renderSpaceCard(sid, applyConfig(sid, sp), false)).join("")}
+    ${customEntries.length ? `
+      <div style="font-size:13px;font-weight:600;color:var(--text-1);margin:1.5rem 0 12px">Custom spaces</div>
+      ${customEntries.map(([sid, cs]) => renderSpaceCard(sid, applyConfig(sid, cs), true)).join("")}
+    ` : ""}
+    <button class="btn-ghost" onclick="document.getElementById('addSpaceModal').classList.add('open')"
+      style="width:100%;padding:12px;font-size:13px;border-style:dashed;margin-top:8px">
+      + Add new space
+    </button>`;
+
+  // Init all people-pickers after DOM is ready
+  document.querySelectorAll(".people-picker").forEach(picker => initPicker(picker));
+}
+
+function renderSpaceCard(sid, sp, isCustom) {
+  const stages = sp.stages || BASE_SPACES.email.stages;
+  return `
+    <div class="profile-card" id="space-card-${sid}" style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;align-items:center;gap:10px;flex:1">
+          <span style="width:12px;height:12px;border-radius:50%;background:${sp.color || '#7c5cbf'};flex-shrink:0"></span>
+          <input type="text" id="slabel-${sid}" value="${sp.label}"
+            class="field-input" style="width:160px;font-size:14px;font-weight:600;padding:6px 10px"
+            placeholder="Space name"/>
+          <span style="font-size:11px;color:var(--text-3)">Space</span>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-primary" onclick="saveSpaceSettings('${sid}')"
+            style="width:auto;height:auto;padding:7px 14px;border-radius:var(--radius-sm);font-size:12px">
+            Save
+          </button>
+          ${isCustom ? `<button class="btn-danger" onclick="removeCustomSpace('${sid}')"
+            style="font-size:12px;padding:7px 12px">Delete space</button>` : ""}
+        </div>
+      </div>
+
+      <div style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">
+        Process steps
+      </div>
+
+      <div id="stages-${sid}">
+        ${stages.map((stage, i) => renderStageRow(sid, i, stage)).join("")}
+      </div>
+
+      <button class="stage-add-btn" onclick="addStage('${sid}')">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        Add step
+      </button>
+    </div>`;
+}
+
+function renderStageRow(sid, idx, stage) {
+  // Support both legacy single-owner and new multi-owner array
+  const owners = stage.owners
+    ? (Array.isArray(stage.owners) ? stage.owners : [stage.owners])
+    : (stage.owner ? [stage.owner] : []);
+
+  const pickerTags     = owners.map(uid => renderTag(uid)).join("");
+  const dropdownOptions = Object.entries(allUsers).map(([uid, u]) => {
+    const isSel = owners.includes(uid) ? "selected" : "";
+    return `<div class="people-option ${isSel}" data-uid="${uid}">
+      <span class="av av-xs ${u.cls || 'av-jc'}">${u.av || uid.slice(0,2).toUpperCase()}</span>
+      <span>${u.name || uid}</span>
+      <span class="check">✓</span>
+    </div>`;
+  }).join("");
+
+  return `
+    <div class="stage-edit-row" id="stage-row-${sid}-${idx}">
+      <div class="stage-num">${idx + 1}</div>
+      <input type="text" class="stage-name-input" id="sname-${sid}-${idx}"
+        value="${stage.name || ''}" placeholder="Step name"/>
+      <div class="people-picker" id="picker-${sid}-${idx}" data-owners="${encodeURIComponent(JSON.stringify(owners))}">
+        <div class="people-selected" tabindex="0">
+          ${pickerTags || '<span class="people-placeholder">Assign people\u2026</span>'}
+        </div>
+        <div class="people-dropdown">
+          ${dropdownOptions}
+        </div>
+      </div>
+      <button class="stage-del-btn" onclick="deleteStage('${sid}', ${idx})" title="Delete step">\xd7</button>
+    </div>`;
+}
+
+function renderTag(uid) {
+  const u = allUsers[uid] || { name: uid, av: uid.slice(0,2).toUpperCase(), cls: "av-jc" };
+  return `<span class="people-tag" data-uid="${uid}">
+    <span class="av av-xs ${u.cls}">${u.av}</span>
+    ${u.name || uid}
+    <button type="button" class="people-tag-remove" data-remove="${uid}" title="Remove">\xd7</button>
+  </span>`;
+}
+
+// ── People picker logic ───────────────────────────────────────────────────
+function initPicker(pickerEl) {
+  const selected = pickerEl.querySelector(".people-selected");
+  const dropdown = pickerEl.querySelector(".people-dropdown");
+
+  selected.addEventListener("click", e => {
+    if (e.target.closest(".people-tag-remove")) return;
+    const isOpen = dropdown.classList.contains("open");
+    document.querySelectorAll(".people-dropdown.open").forEach(d => d.classList.remove("open"));
+    if (!isOpen) dropdown.classList.add("open");
+  });
+
+  selected.addEventListener("click", e => {
+    const btn = e.target.closest(".people-tag-remove");
+    if (!btn) return;
+    toggleOwner(pickerEl, btn.dataset.remove);
+  });
+
+  dropdown.addEventListener("click", e => {
+    const opt = e.target.closest(".people-option");
+    if (!opt) return;
+    toggleOwner(pickerEl, opt.dataset.uid);
+  });
+
+  document.addEventListener("click", e => {
+    if (!pickerEl.contains(e.target)) dropdown.classList.remove("open");
+  }, true);
+}
+
+function toggleOwner(pickerEl, uid) {
+  let owners = JSON.parse(decodeURIComponent(pickerEl.dataset.owners || "[]"));
+  owners = owners.includes(uid) ? owners.filter(o => o !== uid) : [...owners, uid];
+  pickerEl.dataset.owners = encodeURIComponent(JSON.stringify(owners));
+  refreshPickerUI(pickerEl, owners);
+}
+
+function refreshPickerUI(pickerEl, owners) {
+  const selected = pickerEl.querySelector(".people-selected");
+  const dropdown = pickerEl.querySelector(".people-dropdown");
+  selected.innerHTML = owners.map(uid => renderTag(uid)).join("") ||
+    '<span class="people-placeholder">Assign people\u2026</span>';
+  dropdown.querySelectorAll(".people-option").forEach(opt => {
+    opt.classList.toggle("selected", owners.includes(opt.dataset.uid));
+  });
+  dropdown.classList.add("open");
+}
+
+// ── Add step ──────────────────────────────────────────────────────────────
+window.addStage = function(sid) {
+  const container = document.getElementById(`stages-${sid}`);
+  const newIdx    = container.querySelectorAll(".stage-edit-row").length;
+  const div       = document.createElement("div");
+  div.innerHTML   = renderStageRow(sid, newIdx, { name: "", owners: ["jc"] });
+  const row       = div.firstElementChild;
+  container.appendChild(row);
+  initPicker(row.querySelector(".people-picker"));
+  renumberSteps(sid);
+};
+
+// ── Delete step ───────────────────────────────────────────────────────────
+window.deleteStage = function(sid, idx) {
+  const row = document.getElementById(`stage-row-${sid}-${idx}`);
+  if (!row) return;
+  const container = document.getElementById(`stages-${sid}`);
+  if (container.querySelectorAll(".stage-edit-row").length <= 1) {
+    alert("You need at least one step."); return;
+  }
+  if (!confirm("Delete this step?")) return;
+  row.remove();
+  renumberSteps(sid);
+};
+
+function renumberSteps(sid) {
+  const container = document.getElementById(`stages-${sid}`);
+  container.querySelectorAll(".stage-edit-row").forEach((row, i) => {
+    const numEl = row.querySelector(".stage-num");
+    if (numEl) numEl.textContent = i + 1;
+    row.id = `stage-row-${sid}-${i}`;
+    const nameInput = row.querySelector(".stage-name-input");
+    const picker    = row.querySelector(".people-picker");
+    const delBtn    = row.querySelector(".stage-del-btn");
+    if (nameInput) nameInput.id = `sname-${sid}-${i}`;
+    if (picker)    picker.id    = `picker-${sid}-${i}`;
+    if (delBtn)    delBtn.setAttribute("onclick", `deleteStage('${sid}', ${i})`);
+  });
+}
+
+// ── Save space settings ───────────────────────────────────────────────────
+window.saveSpaceSettings = async function(sid) {
+  if (!isAdminUser(CURRENT_USER)) { alert("Admin access required."); return; }
+  const label = document.getElementById(`slabel-${sid}`)?.value.trim();
+  if (!label) { showAlert("Please enter a space name.", false); return; }
+
+  const container = document.getElementById(`stages-${sid}`);
+  const rows      = container.querySelectorAll(".stage-edit-row");
+  const stages    = [];
+
+  rows.forEach((row, i) => {
+    const nameEl = row.querySelector(".stage-name-input");
+    const picker = row.querySelector(".people-picker");
+    const name   = nameEl?.value.trim() || `Step ${i + 1}`;
+
+    let owners = [];
+    try { owners = JSON.parse(decodeURIComponent(picker?.dataset.owners || "[]")); }
+    catch(e) { owners = []; }
+    if (!owners.length) owners = ["jc"];
+
+    const owner       = owners[0];  // primary — backward compat for app.js
+    const ownersLabel = owners.map(uid => allUsers[uid]?.name || uid);
+    const ownerLabel  = ownersLabel.join(", "); // all names joined for display
+
+    stages.push({
+      id: i + 1, key: `s${i + 1}`,
+      name,
+      owner,       // primary owner (kept for backward compat)
+      ownerLabel,  // all names joined e.g. "Shelley, Maryanne"
+      owners,      // full multi-person list
+      ownersLabel  // array of names
+    });
+  });
+
+  try {
+    await saveSpaceConfig(sid, { label, stages });
+    // Update local cache so re-render immediately shows saved values
+    savedConfigs[sid] = { label, stages };
+    // Update the sidebar label live — no reload needed
+    const spaceColor = BASE_SPACES[sid]?.color || customSpaces[sid]?.color;
+    updateSidebarSpace(sid, label, spaceColor);
+    showAlert(`"${label}" saved!`, true, "Space settings updated");
+  } catch(err) {
+    console.error(err);
+    showAlert("Save failed", false, "Check your connection and try again.");
+  }
+};
+
+// ── Custom space helpers ──────────────────────────────────────────────────
+window.removeCustomSpace = async function(sid) {
+  if (!isAdminUser(CURRENT_USER)) { alert("Admin access required."); return; }
+  if (!confirm("Delete this space? Projects in it stay in Firebase but won't appear on the board.")) return;
+  await deleteCustomSpace(sid);
+  delete customSpaces[sid];
+  delete savedConfigs[sid];
+  renderSettings();
+};
+
+window.setSeg = (btn, gid) => {
+  document.querySelectorAll(`#${gid} .seg-btn`).forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+};
+
+window.closeAddSpace = function() {
+  document.getElementById("addSpaceModal").classList.remove("open");
+  document.getElementById("ns-name").value  = "";
+  document.getElementById("ns-types").value = "";
+  document.getElementById("nsError").style.display = "none";
+  document.querySelectorAll("#colorGroup .seg-btn").forEach((b,i) => b.classList.toggle("active", i === 0));
+};
+
+window.saveNewSpace = async function() {
+  if (!isAdminUser(CURRENT_USER)) { alert("Admin access required."); return; }
+  const name  = document.getElementById("ns-name").value.trim();
+  const types = document.getElementById("ns-types").value.split(",").map(t => t.trim()).filter(Boolean);
+  const color = document.querySelector("#colorGroup .seg-btn.active")?.dataset.val || "#3b7dd8";
+  const errEl = document.getElementById("nsError");
+  if (!name) { errEl.textContent = "Please enter a space name."; errEl.style.display = "block"; return; }
+  errEl.style.display = "none";
+
+  const spaceId  = name.toLowerCase().replace(/[^a-z0-9]/g,"_").slice(0,20) + "_" + Date.now().toString().slice(-4);
+  const newSpace = {
+    id: spaceId, label: name, color,
+    types: types.length ? types : ["Type 1"],
+    stages: BASE_SPACES.email.stages.map(s => ({
+      ...s,
+      owners: [s.owner],
+      ownersLabel: [s.ownerLabel]
+    }))
+  };
+  await saveCustomSpace(spaceId, newSpace);
+  customSpaces[spaceId] = newSpace;
+  closeAddSpace();
+  renderSettings();
+  showAlert(`"${name}" created!`, true, "New space added to your sidebar");
+};
+
+function showAlert(msg, success, sub = "") {
+  const toast  = document.getElementById("toast");
+  const msgEl  = document.getElementById("toastMsg");
+  const subEl  = document.getElementById("toastSub");
+  toast.className = `show ${success ? "toast-success" : "toast-error"}`;
+  msgEl.textContent = msg;
+  subEl.textContent = sub;
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => { toast.className = toast.className.replace("show","").trim(); }, 2800);
+}
+
+// ── Update sidebar space label + dot live ─────────────────────────────────
+function updateSidebarSpace(sid, label, color) {
+  const item = document.querySelector(`.space-nav-item[data-space="${sid}"]`);
+  if (!item) return;
+  // Update text node (last child) — keep the dot span intact
+  const textNode = [...item.childNodes].find(n => n.nodeType === Node.TEXT_NODE);
+  if (textNode) textNode.textContent = `\n      ${label}\n    `;
+  else item.lastChild.textContent = label; // fallback
+  // Update dot colour
+  const dot = item.querySelector(".space-dot");
+  if (dot && color) dot.style.background = color;
+}
+
+load().then(() => {
+  // Live-subscribe so sidebar stays in sync if another tab also makes changes
+  subscribeSpaceConfigs(configs => {
+    Object.entries(configs).forEach(([sid, cfg]) => {
+      if (cfg.label) updateSidebarSpace(sid, cfg.label, cfg.color);
+    });
+  });
+  subscribeCustomSpaces(customs => {
+    Object.entries(customs).forEach(([sid, cs]) => {
+      updateSidebarSpace(sid, cs.label, cs.color);
+    });
+  });
+});
+</script>
+
+<script>
+function openSidebar()  { document.getElementById("sidebar").classList.add("mobile-open"); document.getElementById("sidebarOverlay").classList.add("visible"); document.body.style.overflow = "hidden"; }
+function closeSidebar() { document.getElementById("sidebar").classList.remove("mobile-open"); document.getElementById("sidebarOverlay").classList.remove("visible"); document.body.style.overflow = ""; }
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/app-tracker/sw.js')
+      .then(r => console.log('[PWA] Service worker registered'))
+      .catch(e => console.log('[PWA] SW registration failed:', e));
+  });
+}
+</script>
+</body>
+</html>

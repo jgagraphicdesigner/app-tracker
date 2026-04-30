@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
+<meta name="theme-color" content="#2a1a3a"/>
+  <link rel="manifest" href="../manifest.json"/>
+  <link rel="apple-touch-icon" href="../assets/icon-192.png"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="APP Tracker"/>
+<title>APP Project Management — File Library</title>
+<link rel="stylesheet" href="../css/main.css"/>
+<script>const t=localStorage.getItem("theme")||"light";document.documentElement.setAttribute("data-theme",t);</script>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" onclick="openSidebar()"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <div class="topbar-title">File Library</div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn-ghost" onclick="document.getElementById('addCanvaModal').classList.add('open')" style="font-size:12px;display:flex;align-items:center;gap:5px">
+        <span style="font-size:14px">+</span> Add link
+      </button>
+      <button class="btn-primary" onclick="document.getElementById('libFileInput').click()" style="width:auto;height:auto;padding:8px 14px;border-radius:var(--radius-sm);font-size:13px">+ Upload file</button>
+      <input type="file" id="libFileInput" style="display:none" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp,.pptx,.xlsx" onchange="uploadLibFile(event)"/>
+    </div>
+  </div>
+
+  <div class="page-content">
+
+    <!-- ── Canva Links Section ── -->
+    <div class="canva-section-header">
+      <div class="canva-section-title">
+        <span class="canva-badge">
+          <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><rect width="10" height="10" rx="2" fill="white" fill-opacity=".3"/><text x="5" y="8" text-anchor="middle" fill="white" font-size="7" font-weight="700">C</text></svg>
+          Canva
+        </span>
+        Links
+      </div>
+      <div style="font-size:11px;color:var(--text-3)" id="canvaCount">0 links</div>
+    </div>
+
+    <div class="canva-cat-filter" id="canvaCatFilter">
+      <button class="canva-cat-btn active" data-cat="all" onclick="filterCanva(this,'all')">All</button>
+    </div>
+
+    <div class="canva-links-grid" id="canvaLinksGrid">
+      <div style="color:var(--text-3);font-size:13px;grid-column:1/-1">Loading links...</div>
+    </div>
+
+    <hr class="cl-divider"/>
+
+    <!-- ── File Library Section ── -->
+    <div class="library-layout">
+      <div class="library-sidebar">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-size:11px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Folders</span>
+        </div>
+        <div class="library-folder-list" id="folderList">
+          <!-- Folders rendered by JS -->
+        </div>
+        <button class="folder-add-btn" onclick="createNewFolder()">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          New folder
+        </button>
+      </div>
+
+      <div class="library-main">
+        <div id="uploadProgress" style="display:none;margin-bottom:12px" class="alert alert-success">Uploading...</div>
+        <div class="library-grid" id="libraryGrid">
+          <div style="color:var(--text-3);font-size:13px;grid-column:1/-1">Loading files...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- Add Link Modal -->
+<div class="modal-overlay" id="addCanvaModal" onclick="if(event.target.id==='addCanvaModal')closeCanvaModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="canvaModalTitle">Add link</h3>
+      <button class="modal-close" onclick="closeCanvaModal()"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="modal-body">
+      <div class="field-row">
+        <label class="field-label">Link name *</label>
+        <input type="text" id="cl-name" class="field-input" placeholder="e.g. May Newsletter Template"/>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Canva URL *</label>
+        <input type="url" id="cl-url" class="field-input" placeholder="https://..."/>
+        <div class="field-hint" id="urlHint">Paste any link — Canva design, Google Drive folder, website, etc.</div>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Link type</label>
+        <div class="seg-group" id="linkTypeGroup" style="flex-wrap:wrap">
+          <button class="seg-btn active" data-val="Canva"        onclick="setSeg(this,'linkTypeGroup');updateLinkTypeHint('Canva')">🎨 Canva</button>
+          <button class="seg-btn"        data-val="Google Drive" onclick="setSeg(this,'linkTypeGroup');updateLinkTypeHint('Google Drive')">📁 Google Drive</button>
+          <button class="seg-btn"        data-val="Google Docs"  onclick="setSeg(this,'linkTypeGroup');updateLinkTypeHint('Google Docs')">📝 Google Docs</button>
+          <button class="seg-btn"        data-val="Google Sheets" onclick="setSeg(this,'linkTypeGroup');updateLinkTypeHint('Google Sheets')">📊 Google Sheets</button>
+          <button class="seg-btn"        data-val="Website"      onclick="setSeg(this,'linkTypeGroup');updateLinkTypeHint('Website')">🔗 Website</button>
+          <button class="seg-btn"        data-val="Other"        onclick="setSeg(this,'linkTypeGroup');updateLinkTypeHint('Other')">📌 Other</button>
+        </div>
+        <div id="linkTypeHint" style="font-size:11px;color:var(--text-3);margin-top:5px">Paste your Canva design or template URL</div>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Category</label>
+        <div class="seg-group" id="canvaCatGroup">
+          <button class="seg-btn active" data-val="Email"     onclick="setSeg(this,'canvaCatGroup')">Email</button>
+          <button class="seg-btn"        data-val="PDF"       onclick="setSeg(this,'canvaCatGroup')">PDF</button>
+          <button class="seg-btn"        data-val="Prints"    onclick="setSeg(this,'canvaCatGroup')">Prints</button>
+          <button class="seg-btn"        data-val="Templates" onclick="setSeg(this,'canvaCatGroup')">Templates</button>
+          <button class="seg-btn"        data-val="Brand"     onclick="setSeg(this,'canvaCatGroup')">Brand</button>
+          <button class="seg-btn"        data-val="Other"     onclick="setSeg(this,'canvaCatGroup')">Other</button>
+        </div>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Icon / emoji</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="iconGroup">
+          <button class="seg-btn active" data-val="🎨" onclick="setSeg(this,'iconGroup')">🎨</button>
+          <button class="seg-btn" data-val="✉" onclick="setSeg(this,'iconGroup')">✉</button>
+          <button class="seg-btn" data-val="📄" onclick="setSeg(this,'iconGroup')">📄</button>
+          <button class="seg-btn" data-val="🖨" onclick="setSeg(this,'iconGroup')">🖨</button>
+          <button class="seg-btn" data-val="📊" onclick="setSeg(this,'iconGroup')">📊</button>
+          <button class="seg-btn" data-val="🖼" onclick="setSeg(this,'iconGroup')">🖼</button>
+          <button class="seg-btn" data-val="📱" onclick="setSeg(this,'iconGroup')">📱</button>
+          <button class="seg-btn" data-val="🎯" onclick="setSeg(this,'iconGroup')">🎯</button>
+          <button class="seg-btn" data-val="⭐" onclick="setSeg(this,'iconGroup')">⭐</button>
+          <button class="seg-btn" data-val="💼" onclick="setSeg(this,'iconGroup')">💼</button>
+        </div>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Description (optional)</label>
+        <input type="text" id="cl-desc" class="field-input" placeholder="e.g. Used for monthly email campaigns"/>
+      </div>
+      <div id="canvaLinkError" class="alert alert-error" style="display:none"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="closeCanvaModal()">Cancel</button>
+      <button class="btn-primary" id="canvaSaveBtn" onclick="saveCanvaLink()" style="width:auto;height:auto;padding:8px 18px;border-radius:var(--radius-sm)">Save link</button>
+    </div>
+  </div>
+</div>
+
+<!-- File viewer -->
+<div class="modal-overlay" id="fileViewerModal" onclick="this.classList.remove('open')">
+  <div class="modal modal-xl" onclick="event.stopPropagation()" style="max-height:90vh">
+    <div class="modal-header">
+      <h3 id="fileViewerTitle">File</h3>
+      <div style="display:flex;gap:6px;align-items:center">
+        <a id="fileDownloadBtn" download style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:6px 12px;font-size:12px;color:var(--text-1);text-decoration:none;display:inline-flex;align-items:center;gap:5px">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v8M3.5 6l3 3 3-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.5 11h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          Download
+        </a>
+        <button class="btn-ghost" id="fileDeleteBtn" style="font-size:12px;padding:6px 12px">Delete</button>
+        <button class="modal-close" onclick="document.getElementById('fileViewerModal').classList.remove('open')"><svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+      </div>
+    </div>
+    <div id="fileViewerBody" style="padding:1rem;min-height:300px"></div>
+  </div>
+</div>
+
+<script type="module">
+import { saveFile, deleteFile, subscribeFiles, updateFile, saveCanvaLink as fbSaveCanvaLink, deleteCanvaLink, updateCanvaLink, subscribeCanvaLinks, saveFolder, deleteFolder, subscribeFolders, moveFileToFolder , subscribeCustomSpaces } from "../js/firebase.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme , mergeCustomSpaces } from "../js/helpers.js"
+import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
+
+const CURRENT_USER = authGuard();
+if (!CURRENT_USER) throw new Error("not auth");
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("files", getCurrentSpace()));
+document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("files"));
+setupSidebar(CURRENT_USER);
+setupNotifBadge(CURRENT_USER);
+// Keep sidebar spaces list in sync with custom spaces
+subscribeCustomSpaces(_cs => {
+  const _sb = document.getElementById("sidebar"); if (!_sb) return;
+  const _merged = mergeCustomSpaces(_cs, {});
+  _sb.outerHTML = renderSidebar("files", getCurrentSpace(), _merged);
+  setupSidebar(CURRENT_USER);
+});
+initTheme(); updateThemeBtn(localStorage.getItem("theme")||"light");
+window.toggleTheme = toggleTheme;
+window.doLogout = () => { sessionStorage.clear(); window.location.href = "../index.html"; };
+window.switchSpace = s => { sessionStorage.setItem("app_space",s); location.href = "dashboard.html"; };
+
+let allFiles       = [];
+let allCanvaLinks  = [];
+let allFolders     = [];
+let activeFolder   = "all";
+let activeCanvaCat = "all";
+let editingCanvaId = null;
+let dragFileId     = null;
+
+// Built-in folders always present
+const BUILTIN_FOLDERS = ["All files","Email","PDF","Prints","Templates"];
+
+// ── Folder management ─────────────────────────────────────────
+window.createNewFolder = async function() {
+  const name = prompt("New folder name:");
+  if (!name?.trim()) return;
+  if (BUILTIN_FOLDERS.map(f=>f.toLowerCase()).includes(name.trim().toLowerCase())) {
+    alert("That folder name already exists."); return;
+  }
+  await saveFolder({ name: name.trim(), createdBy: CURRENT_USER });
+};
+
+window.deleteFolderItem = async function(id, name) {
+  if (!confirm(`Delete folder "${name}"? Files inside will be moved to All files.`)) return;
+  // Move all files in this folder back to unassigned (null) so they appear in "All files"
+  const inFolder = allFiles.filter(f => f.folder === name);
+  for (const f of inFolder) await moveFileToFolder(f.id, null);
+  await deleteFolder(id);
+  if (activeFolder === name) { activeFolder = "all"; }
+};
+
+function renderFolderList() {
+  const list = document.getElementById("folderList");
+  if (!list) return;
+
+  const folderIcon = `<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 3.5A1.5 1.5 0 012.5 2H5l1.5 1.5H11.5A1.5 1.5 0 0113 5v5.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 011 10.5v-7z" stroke="currentColor" stroke-width="1.2"/></svg>`;
+
+  // All files always first
+  const allItem = `<div class="folder-item ${activeFolder==='all'?'active':''}" data-folder="all"
+    onclick="setActiveFolder('all')"
+    ondragover="folderDragOver(event,this,'all')"
+    ondragleave="this.classList.remove('drag-over')"
+    ondrop="folderDrop(event,'All')">
+    ${folderIcon} All files
+    <span style="margin-left:auto;font-size:10px;color:var(--text-3)">${allFiles.length}</span>
+  </div>`;
+
+  // Built-in folders
+  const builtins = ["Email","PDF","Prints","Templates"].map(name => {
+    const cnt = allFiles.filter(f => f.folder === name).length;
+    return `<div class="folder-item ${activeFolder===name?'active':''}" data-folder="${name}"
+      onclick="setActiveFolder('${name}')"
+      ondragover="folderDragOver(event,this,'${name}')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="folderDrop(event,'${name}')">
+      ${folderIcon} ${name}
+      <span style="margin-left:auto;font-size:10px;color:var(--text-3)">${cnt}</span>
+    </div>`;
+  }).join("");
+
+  // Custom folders from Firebase
+  const customs = allFolders.map(folder => {
+    const cnt = allFiles.filter(f => f.folder === folder.name).length;
+    return `<div class="folder-item ${activeFolder===folder.name?'active':''}" data-folder="${folder.name}"
+      onclick="setActiveFolder('${folder.name}')"
+      ondragover="folderDragOver(event,this,'${folder.name}')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="folderDrop(event,'${folder.name}')">
+      ${folderIcon} ${folder.name}
+      <span style="margin-left:auto;font-size:10px;color:var(--text-3)">${cnt}</span>
+      <div class="folder-actions">
+        <button class="folder-del-btn" onclick="event.stopPropagation();deleteFolderItem('${folder.id}','${folder.name}')" title="Delete folder">×</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  list.innerHTML = allItem + builtins + customs;
+}
+
+window.setActiveFolder = function(folder) {
+  activeFolder = folder;
+  renderFolderList();
+  renderGrid();
+};
+
+// ── Drag & drop file to folder ───────────────────────────────
+window.folderDragOver = function(e, el, folder) {
+  e.preventDefault(); e.stopPropagation();
+  el.classList.add("drag-over");
+};
+window.folderDrop = async function(e, folderName) {
+  e.preventDefault();
+  document.querySelectorAll(".folder-item").forEach(el => el.classList.remove("drag-over"));
+  if (!dragFileId) return;
+  await moveFileToFolder(dragFileId, folderName);
+  dragFileId = null;
+};
+
+// ── seg helper ──────────────────────────────────────────────────────────
+window.setSeg = (btn, gid) => {
+  document.querySelectorAll(`#${gid} .seg-btn`).forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+};
+
+// ── Canva Links ─────────────────────────────────────────────────────────
+function renderCanvaLinks() {
+  const filtered = activeCanvaCat === "all"
+    ? allCanvaLinks
+    : allCanvaLinks.filter(l => l.category === activeCanvaCat);
+
+  const grid  = document.getElementById("canvaLinksGrid");
+  const count = document.getElementById("canvaCount");
+  count.textContent = `${allCanvaLinks.length} link${allCanvaLinks.length!==1?"s":""}`;
+
+  // Rebuild category filter pills
+  const cats   = ["all", ...new Set(allCanvaLinks.map(l => l.category).filter(Boolean))];
+  const filter = document.getElementById("canvaCatFilter");
+  filter.innerHTML = cats.map(c => `
+    <button class="canva-cat-btn ${activeCanvaCat===c?"active":""}" data-cat="${c}" onclick="filterCanva(this,'${c}')">
+      ${c==="all" ? "All" : c}
+    </button>`).join("");
+
+  if (!filtered.length && allCanvaLinks.length === 0) {
+    grid.innerHTML = `<div style="color:var(--text-3);font-size:13px;grid-column:1/-1;padding:8px 0">No Canva links yet — add your first one!</div>`;
+  } else if (!filtered.length) {
+    grid.innerHTML = `<div style="color:var(--text-3);font-size:13px;grid-column:1/-1;padding:8px 0">No links in this category.</div>`;
+  } else {
+    grid.innerHTML = filtered.map(l => {
+    // Try to extract Canva thumbnail from the URL (works for public designs)
+    const canvaThumb = getCanvaThumb(l.url);
+    const linkIcon = getLinkTypeIcon(l);
+    const phLabel  = l.linkType && l.linkType!=="Canva" ? l.linkType : "Canva Design";
+    const thumbHtml = canvaThumb
+      ? `<img src="${canvaThumb}" alt="${l.name}" onerror="this.parentElement.innerHTML='<div class=cl-thumbnail-placeholder><span class=cl-ph-icon>${linkIcon}</span><span class=cl-ph-text>${phLabel}</span></div>'">`
+      : `<div class="cl-thumbnail-placeholder"><span class="cl-ph-icon">${linkIcon}</span><span class="cl-ph-text">${phLabel}</span></div>`;
+    const descHtml = l.description ? `<div class="canva-link-desc">${l.description}</div>` : "";
+    return `<div class="canva-link-card">
+      <div class="cl-thumbnail">
+        ${thumbHtml}
+        <div class="cl-thumbnail-actions">
+          <button class="cl-action-btn" onclick="event.stopPropagation();editCanvaLink('${l.id}')" title="Edit">✏️</button>
+          <button class="cl-action-btn" onclick="event.stopPropagation();removeCanvaLink('${l.id}')" title="Delete">🗑</button>
+        </div>
+      </div>
+      <div class="canva-link-body">
+        <div class="canva-link-name">${l.name}</div>
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">
+        ${l.linkType && l.linkType!=="Canva" ? `<span style="font-size:10px;font-weight:600;background:var(--surface2);border:1px solid var(--border2);color:var(--text-2);border-radius:8px;padding:1px 7px">${l.linkType}</span>` : ""}
+        <span class="canva-link-cat">${l.category||"Other"}</span>
+      </div>
+        ${descHtml}
+        <a href="${l.url}" target="_blank" rel="noopener" class="canva-link-btn" onclick="event.stopPropagation()">
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M1 11L11 1M11 1H5M11 1v6" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Open in Canva
+        </a>
+      </div>
+    </div>`;
+  }).join("") +
+      `<div class="canva-add-card" onclick="document.getElementById('addCanvaModal').classList.add('open')">
+        <span style="font-size:24px">+</span>
+        Add link
+      </div>`;
+  }
+}
+
+window.filterCanva = function(btn, cat) {
+  activeCanvaCat = cat;
+  renderCanvaLinks();
+};
+
+window.closeCanvaModal = function() {
+  document.getElementById("addCanvaModal").classList.remove("open");
+  editingCanvaId = null;
+  document.getElementById("canvaModalTitle").textContent = "Add Canva link";
+  document.getElementById("cl-name").value = "";
+  document.getElementById("cl-url").value  = "";
+  document.getElementById("cl-desc").value = "";
+  document.getElementById("canvaLinkError").style.display = "none";
+  document.querySelectorAll("#linkTypeGroup .seg-btn").forEach((b,i) => b.classList.toggle("active",i===0));
+  document.querySelectorAll("#canvaCatGroup .seg-btn").forEach((b,i) => b.classList.toggle("active",i===0));
+  document.querySelectorAll("#iconGroup .seg-btn").forEach((b,i) => b.classList.toggle("active",i===0));
+  const hint = document.getElementById("linkTypeHint");
+  if (hint) hint.textContent = "Paste your Canva design or template URL";
+};
+
+// Link type hints
+const LINK_TYPE_HINTS = {
+  "Canva":         "Paste your Canva design, template, or brand kit URL",
+  "Google Drive":  "Paste a Google Drive folder or file sharing link",
+  "Google Docs":   "Paste a Google Docs sharing link",
+  "Google Sheets": "Paste a Google Sheets sharing link",
+  "Website":       "Paste any website or web page URL",
+  "Other":         "Paste any URL",
+};
+const LINK_TYPE_ICONS = {
+  "Canva":         "🎨",
+  "Google Drive":  "📁",
+  "Google Docs":   "📝",
+  "Google Sheets": "📊",
+  "Website":       "🔗",
+  "Other":         "📌",
+};
+window.updateLinkTypeHint = function(type) {
+  const hint = document.getElementById("linkTypeHint");
+  const iconGroup = document.getElementById("iconGroup");
+  if (hint) hint.textContent = LINK_TYPE_HINTS[type] || LINK_TYPE_HINTS["Other"];
+  // Auto-set icon based on link type
+  const autoIcon = LINK_TYPE_ICONS[type];
+  if (autoIcon && iconGroup) {
+    iconGroup.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b.dataset.val === autoIcon));
+  }
+};
+
+window.saveCanvaLink = async function() {
+  const name = document.getElementById("cl-name").value.trim();
+  const url  = document.getElementById("cl-url").value.trim();
+  const err  = document.getElementById("canvaLinkError");
+  if (!name) { err.textContent="Please enter a name."; err.style.display="block"; return; }
+  if (!url || !url.startsWith("http")) { err.textContent="Please enter a valid URL."; err.style.display="block"; return; }
+  err.style.display = "none";
+
+  const linkType    = document.querySelector("#linkTypeGroup .seg-btn.active")?.dataset.val || "Canva";
+  const category    = document.querySelector("#canvaCatGroup .seg-btn.active")?.dataset.val || "Other";
+  const icon        = document.querySelector("#iconGroup .seg-btn.active")?.dataset.val || LINK_TYPE_ICONS[linkType] || "🎨";
+  const description = document.getElementById("cl-desc").value.trim();
+  const btn = document.getElementById("canvaSaveBtn");
+  btn.textContent = "Saving…"; btn.disabled = true;
+
+  if (editingCanvaId) {
+    await updateCanvaLink(editingCanvaId, { name, url, linkType, category, icon, description });
+  } else {
+    await fbSaveCanvaLink({ name, url, linkType, category, icon, description, addedBy: CURRENT_USER });
+  }
+
+  btn.textContent = "Save link"; btn.disabled = false;
+  closeCanvaModal();
+};
+
+window.editCanvaLink = function(id) {
+  const l = allCanvaLinks.find(x => x.id === id); if (!l) return;
+  editingCanvaId = id;
+  document.getElementById("canvaModalTitle").textContent = "Edit link";
+  document.getElementById("cl-name").value = l.name;
+  document.getElementById("cl-url").value  = l.url;
+  document.getElementById("cl-desc").value = l.description||"";
+  document.querySelectorAll("#linkTypeGroup .seg-btn").forEach(b => b.classList.toggle("active", b.dataset.val===(l.linkType||"Canva")));
+  document.querySelectorAll("#canvaCatGroup .seg-btn").forEach(b => b.classList.toggle("active", b.dataset.val===l.category));
+  document.querySelectorAll("#iconGroup .seg-btn").forEach(b => b.classList.toggle("active", b.dataset.val===l.icon));
+  document.getElementById("addCanvaModal").classList.add("open");
+};
+
+window.removeCanvaLink = async function(id) {
+  if (!confirm("Remove this Canva link?")) return;
+  await deleteCanvaLink(id);
+};
+
+// ── File Library ─────────────────────────────────────────────────────────
+function fileIcon(type) {
+  if (!type) return "📄";
+  if (type.includes("pdf"))   return "📄";
+  if (type.includes("image")) return "🖼";
+  if (type.includes("presentation")||type.includes("powerpoint")) return "📊";
+  if (type.includes("spreadsheet")||type.includes("excel")) return "📈";
+  return "📝";
+}
+
+// ── File thumbnail HTML ────────────────────────────────────────
+function getFileThumb(f) {
+  // Image files — show actual image
+  if (f.type && f.type.startsWith("image/") && f.data) {
+    return `<img src="${f.data}" alt="${f.name}" style="width:100%;height:100%;object-fit:cover;display:block"/>`;
+  }
+  // PDF
+  if (f.type && f.type.includes("pdf")) {
+    return `<div class="lf-thumb-placeholder lf-thumb-pdf">
+      <span class="lf-icon">📄</span>
+    </div>`;
+  }
+  // Word
+  if (f.type && (f.type.includes("word") || f.type.includes("document") || f.name?.endsWith(".doc") || f.name?.endsWith(".docx"))) {
+    return `<div class="lf-thumb-placeholder lf-thumb-word">
+      <span class="lf-icon">📝</span>
+    </div>`;
+  }
+  // Excel
+  if (f.type && (f.type.includes("spreadsheet") || f.type.includes("excel") || f.name?.endsWith(".xlsx") || f.name?.endsWith(".xls") || f.name?.endsWith(".csv"))) {
+    return `<div class="lf-thumb-placeholder lf-thumb-xls">
+      <span class="lf-icon">📊</span>
+    </div>`;
+  }
+  // PowerPoint
+  if (f.type && (f.type.includes("presentation") || f.type.includes("powerpoint") || f.name?.endsWith(".pptx") || f.name?.endsWith(".ppt"))) {
+    return `<div class="lf-thumb-placeholder lf-thumb-ppt">
+      <span class="lf-icon">📋</span>
+    </div>`;
+  }
+  // Default
+  return `<div class="lf-thumb-placeholder lf-thumb-other">
+    <span class="lf-icon">${fileIcon(f.type)}</span>
+  </div>`;
+}
+
+// ── Canva thumbnail extractor ──────────────────────────────────
+// Canva design URLs: https://www.canva.com/design/DAxxxxxx/...
+// Canva public thumbnails: https://www.canva.com/design/{id}/thumbnail.png
+function getCanvaThumb(url) {
+  if (!url) return null;
+  // Only try thumbnail for Canva URLs
+  const match = url.match(/canva\.com\/design\/([A-Za-z0-9_-]+)/);
+  if (!match) return null;
+  return `https://www.canva.com/design/${match[1]}/thumbnail.png`;
+}
+
+function getLinkTypeIcon(l) {
+  const type = l.linkType || "Canva";
+  const iconMap = {
+    "Canva":"🎨","Google Drive":"📁","Google Docs":"📝",
+    "Google Sheets":"📊","Website":"🔗","Other":"📌"
+  };
+  return l.icon || iconMap[type] || "🔗";
+}
+function formatBytes(bytes) {
+  if (!bytes) return "";
+  if (bytes < 1024) return bytes+"B";
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(0)+"KB";
+  return (bytes/(1024*1024)).toFixed(1)+"MB";
+}
+
+window.selectFolder = function(el, folder) {
+  setActiveFolder(folder === "all" ? "all" : folder);
+};
+
+function renderGrid() {
+  const grid     = document.getElementById("libraryGrid");
+  const filtered = activeFolder==="all" ? allFiles : allFiles.filter(f => f.folder===activeFolder);
+  if (!filtered.length) {
+    grid.innerHTML = `<div style="color:var(--text-3);font-size:13px;grid-column:1/-1;padding:2rem 0">No files here yet.</div>`;
+    return;
+  }
+  grid.innerHTML = filtered.map(f => {
+    const thumb = getFileThumb(f);
+    return `<div class="library-file-card"
+      draggable="true"
+      ondragstart="dragFileId='${f.id}';event.target.classList.add('dragging')"
+      ondragend="event.target.classList.remove('dragging')"
+      style="position:relative">
+      <div onclick="openFile('${f.id}')">
+        <div class="lf-thumb">${thumb}</div>
+        <div class="lf-body">
+          <div class="library-file-name" title="${f.name}">${f.name}</div>
+          <div class="library-file-meta">${formatBytes(f.size)}${f.folder&&f.folder!=="All"?" · "+f.folder:""}</div>
+        </div>
+      </div>
+      <div style="position:absolute;top:6px;right:6px;z-index:10">
+        <button onclick="event.stopPropagation();toggleMoveMenu('${f.id}')"
+          style="background:rgba(0,0,0,.5);border:none;border-radius:5px;color:white;cursor:pointer;padding:3px 7px;font-size:11px;backdrop-filter:blur(4px)"
+          title="Move to folder">⇥</button>
+        <div class="file-move-menu" id="movemenu-${f.id}">
+          <div style="font-size:10px;color:var(--text-3);padding:6px 14px;border-bottom:1px solid var(--border);font-weight:600">MOVE TO</div>
+          ${getAllFolderNames().map(name => `<div class="file-move-option" onclick="event.stopPropagation();moveFile('${f.id}','${name}')">${name}</div>`).join("")}
+        </div>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+window.openFile = function(id) {
+  const f = allFiles.find(x=>x.id===id); if (!f) return;
+  document.getElementById("fileViewerTitle").textContent = f.name;
+  const body = document.getElementById("fileViewerBody");
+  // Set download link for all file types
+  const dlBtn = document.getElementById("fileDownloadBtn");
+  if (dlBtn && f.data) {
+    dlBtn.href     = f.data;
+    dlBtn.download = f.name;
+    dlBtn.style.display = "inline-flex";
+  }
+  if (f.type?.includes("image")) {
+    body.innerHTML = `<img src="${f.data}" style="max-width:100%;border-radius:8px"/>`;
+  } else if (f.type?.includes("pdf")) {
+    body.innerHTML = `<iframe src="${f.data}" style="width:100%;height:560px;border:none;border-radius:8px"></iframe>`;
+  } else {
+    body.innerHTML = `<div style="text-align:center;padding:2rem">
+      <div style="font-size:56px">${fileIcon(f.type)}</div>
+      <div style="margin-top:14px;font-size:15px;font-weight:600;color:var(--text-1)">${f.name}</div>
+      <div style="font-size:12px;color:var(--text-3);margin-top:4px">${formatBytes(f.size||0)}</div>
+      <a href="${f.data}" download="${f.name}" style="display:inline-flex;align-items:center;gap:7px;margin-top:18px;background:var(--purple);color:white;padding:11px 22px;border-radius:var(--radius-sm);text-decoration:none;font-weight:600;font-size:14px">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v8M4 6l3 3 3-3" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1.5 12h11" stroke="white" stroke-width="1.5" stroke-linecap="round"/></svg>
+        Download file
+      </a>
+    </div>`;
+  }
+  document.getElementById("fileDeleteBtn").onclick = async () => {
+    if (!confirm("Delete this file?")) return;
+    await deleteFile(id);
+    document.getElementById("fileViewerModal").classList.remove("open");
+  };
+  document.getElementById("fileViewerModal").classList.add("open");
+};
+
+window.uploadLibFile = async function(event) {
+  const file = event.target.files[0]; if (!file) return;
+  if (file.size > 50*1024*1024) { alert("File too large — max 50MB"); return; }
+  const progress = document.getElementById("uploadProgress");
+  progress.textContent="Uploading..."; progress.style.display="block";
+  const folder = activeFolder === "all" ? null : activeFolder;
+  const reader  = new FileReader();
+  reader.onload = async e => {
+    await saveFile({ name:file.name, type:file.type, size:file.size, data:e.target.result, folder, uploadedBy:CURRENT_USER });
+    progress.textContent="File uploaded!";
+    setTimeout(() => { progress.style.display="none"; }, 2500);
+    event.target.value="";
+  };
+  reader.readAsDataURL(file);
+};
+
+// ── Subscriptions ──────────────────────────────────────────────────────
+// ── Move file helpers ─────────────────────────────────────────
+function getAllFolderNames() {
+  const customs = allFolders.map(f => f.name);
+  return ["All","Email","PDF","Prints","Templates",...customs];
+}
+
+window.toggleMoveMenu = function(fileId) {
+  document.querySelectorAll(".file-move-menu").forEach(m => {
+    if (m.id !== `movemenu-${fileId}`) m.classList.remove("open");
+  });
+  document.getElementById(`movemenu-${fileId}`)?.classList.toggle("open");
+};
+
+window.moveFile = async function(fileId, folderName) {
+  await moveFileToFolder(fileId, folderName);
+  document.querySelectorAll(".file-move-menu").forEach(m => m.classList.remove("open"));
+};
+
+document.addEventListener("click", e => {
+  if (!e.target.closest(".file-move-menu") && !e.target.closest("[onclick*='toggleMoveMenu']")) {
+    document.querySelectorAll(".file-move-menu.open").forEach(m => m.classList.remove("open"));
+  }
+});
+
+let _filesRafTimer = null;
+function scheduleFilesRender() {
+  if (_filesRafTimer) cancelAnimationFrame(_filesRafTimer);
+  _filesRafTimer = requestAnimationFrame(() => {
+    _filesRafTimer = null;
+    renderFolderList();
+    renderGrid();
+  });
+}
+
+let _lastCanvaKey = "";
+subscribeCanvaLinks(links => {
+  const key = links.map(l => l.id + l.updatedAt).join(",");
+  if (key === _lastCanvaKey) return;
+  _lastCanvaKey = key;
+  allCanvaLinks = links;
+  renderCanvaLinks();
+});
+
+let _lastFilesKey = "";
+subscribeFiles(files => {
+  const key = files.map(f => f.id + (f.folder||"")).join(",");
+  if (key === _lastFilesKey) return;
+  _lastFilesKey = key;
+  allFiles = files;
+  scheduleFilesRender();
+});
+
+let _lastFoldersKey = "";
+subscribeFolders(folders => {
+  const key = folders.map(f => f.id + f.name).join(",");
+  if (key === _lastFoldersKey) return;
+  _lastFoldersKey = key;
+  allFolders = folders;
+  scheduleFilesRender();
+});
+</script>
+<script>
+function openSidebar()  { document.getElementById("sidebar").classList.add("mobile-open"); document.getElementById("sidebarOverlay").classList.add("visible"); document.body.style.overflow="hidden"; }
+function closeSidebar() { document.getElementById("sidebar").classList.remove("mobile-open"); document.getElementById("sidebarOverlay").classList.remove("visible"); document.body.style.overflow=""; }
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/app-tracker/sw.js')
+      .then(r => console.log('[PWA] Service worker registered'))
+      .catch(e => console.log('[PWA] SW registration failed:', e));
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
+<meta name="theme-color" content="#2a1a3a"/>
+  <link rel="manifest" href="../manifest.json"/>
+  <link rel="apple-touch-icon" href="../assets/icon-192.png"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="APP Tracker"/>
+<title>APP Project Management — Chat</title>
+<link rel="stylesheet" href="../css/main.css"/>
+<script>const t=localStorage.getItem("theme")||"light";document.documentElement.setAttribute("data-theme",t);</script>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" onclick="openSidebar()"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <div class="topbar-title">Chat</div>
+    </div>
+  </div>
+
+  <div class="chat-layout" id="chatLayout" style="height:calc(100dvh - 52px);min-height:400px">
+    <div class="chat-sidebar">
+      <div class="chat-sidebar-header">
+        <span>Messages</span>
+      </div>
+      <div class="chat-room-list" id="roomList">
+        <div style="color:var(--text-3);font-size:13px;padding:12px">Loading rooms...</div>
+      </div>
+    </div>
+
+    <div class="chat-main" id="chatMain">
+      <!-- Header -->
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <div id="chatRoomIcon" style="width:34px;height:34px;border-radius:8px;background:var(--purple-dim);display:none;align-items:center;justify-content:center;font-size:16px;flex-shrink:0"></div>
+          <div>
+            <div class="chat-header-name" id="chatRoomName">Select a chat</div>
+            <div class="chat-header-meta" id="chatRoomMeta"></div>
+          </div>
+        </div>
+        <div class="chat-header-actions" id="chatHeaderActions" style="display:none">
+          <button class="chat-members-btn" id="membersBtn" onclick="toggleMembersPanel()">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="5" cy="4" r="2.5" stroke="currentColor" stroke-width="1.2"/><path d="M1 11c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="11" cy="4.5" r="2" stroke="currentColor" stroke-width="1.2"/><path d="M11 8.5c1.1.3 2 1.3 2 2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+            <span id="membersBtnLabel">Members</span>
+          </button>
+          <button class="chat-delete-btn" id="deleteGroupBtn" onclick="deleteCurrentGroup()" style="display:none">
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M2 3.5h9M5 3.5V2.5h3v1M4 3.5l.5 7h4l.5-7" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span>Delete group</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="chat-messages" id="chatMessages">
+        <div style="text-align:center;color:var(--text-3);padding:2rem;font-size:13px">Select a room or person to start messaging</div>
+      </div>
+
+      <div class="chat-input-row" id="chatInputRow" style="display:none;position:relative">
+        <!-- Emoji panel (above input) -->
+        <div id="emojiPanel" class="emoji-panel" style="display:none"></div>
+
+        <!-- Image input (hidden) -->
+        <input type="file" id="chatImgInput" accept="image/*" style="display:none"/>
+
+        <!-- Emoji button -->
+        <button class="emoji-btn" onclick="toggleEmoji()" title="Emoji">😊</button>
+
+        <!-- Image button -->
+        <button class="emoji-btn" onclick="sendImage()" title="Attach image" style="padding:6px 8px" aria-label="Attach image">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M15.5 8.5l-7 7a4.5 4.5 0 01-6.364-6.364l7-7a3 3 0 014.243 4.243l-7 7a1.5 1.5 0 01-2.122-2.122l6.5-6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+
+        <!-- Text input -->
+        <input type="text" id="msgInput" placeholder="Type a message..." style="flex:1"/>
+
+        <!-- Send button -->
+        <button class="chat-send-btn" onclick="sendMsg()">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 8L2 2l2 6-2 6 12-6z" fill="white"/></svg>
+        </button>
+      </div>
+
+      <!-- Members panel (slide in from right) -->
+      <div class="members-panel" id="membersPanel">
+        <div class="members-panel-header">
+          <span class="members-panel-title">👥 Members</span>
+          <button class="members-panel-close" onclick="toggleMembersPanel()">✕</button>
+        </div>
+        <div class="members-list" id="membersList"></div>
+        <div class="member-add-section" id="memberAddSection" style="display:none">
+          <div class="member-add-title">Add to group</div>
+          <div id="addableMembersList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<style>
+/* chat-layout and chat-main defined in main.css — no overrides needed here */
+#emojiPanel { position: absolute; bottom: 100%; left: 0; }
+@media (max-width: 768px) {
+  .chat-layout { flex-direction: column; height: auto !important; }
+  .chat-sidebar { width: 100% !important; border-right: none !important; border-bottom: 1px solid var(--border); max-height: 180px; overflow-y: auto; }
+  .chat-main { height: 60vh; }
+  #emojiPanel { left: 0; right: 0; width: auto !important; }
+}
+</style>
+
+<script type="module" src="../js/chat.js"></script>
+<!-- Create group modal -->
+<div class="modal-overlay" id="createGroupModal" onclick="if(event.target.id==='createGroupModal')closeCreateGroupModal()">
+</div>
+
+<script>
+function openSidebar()  { document.getElementById("sidebar").classList.add("mobile-open"); document.getElementById("sidebarOverlay").classList.add("visible"); document.body.style.overflow="hidden"; }
+function closeSidebar() { document.getElementById("sidebar").classList.remove("mobile-open"); document.getElementById("sidebarOverlay").classList.remove("visible"); document.body.style.overflow=""; }
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/app-tracker/sw.js')
+      .then(r => console.log('[PWA] Service worker registered'))
+      .catch(e => console.log('[PWA] SW registration failed:', e));
+  });
+}
+</script>
+</body>
+</html>

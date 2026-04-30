@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
+<meta name="theme-color" content="#2a1a3a"/>
+<link rel="manifest" href="../manifest.json"/>
+<link rel="apple-touch-icon" href="../assets/icon-192.png"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="APP Tracker"/>
+<title>APP Project Management — Notifications</title>
+<link rel="stylesheet" href="../css/main.css"/>
+<script>const t=localStorage.getItem("theme")||"light";document.documentElement.setAttribute("data-theme",t);</script>
+</head>
+<body>
+<div class="app-shell" id="appShell">
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <button class="hamburger" onclick="openSidebar()"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
+      <div class="topbar-title">Notifications</div>
+    </div>
+    <div class="topbar-right"><button class="btn-ghost" onclick="clearAll()" style="font-size:12px">Clear all</button></div>
+  </div>
+  <div class="page-content">
+    <div style="max-width:640px"><div id="notifPageList"><p style="color:var(--text-3);font-size:13px">Loading...</p></div></div>
+  </div>
+</div>
+</div>
+<script type="module">
+import { subscribeNotifications, markNotifRead, clearNotifications , subscribeCustomSpaces } from "../js/firebase.js"
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, timeAgo , mergeCustomSpaces } from "../js/helpers.js"
+import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
+
+const CURRENT_USER = authGuard();
+if (!CURRENT_USER) throw new Error("not auth");
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("notifications", getCurrentSpace()));
+document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("notifications"));
+setupSidebar(CURRENT_USER);
+setupNotifBadge(CURRENT_USER);
+// Keep sidebar spaces list in sync with custom spaces
+subscribeCustomSpaces(_cs => {
+  const _sb = document.getElementById("sidebar"); if (!_sb) return;
+  const _merged = mergeCustomSpaces(_cs, {});
+  _sb.outerHTML = renderSidebar("notifications", getCurrentSpace(), _merged);
+  setupSidebar(CURRENT_USER);
+});
+initTheme(); updateThemeBtn(localStorage.getItem("theme")||"light");
+window.toggleTheme = toggleTheme;
+window.doLogout = () => { sessionStorage.clear(); window.location.href = "../index.html"; };
+window.switchSpace = s => {};
+window.clearAll = async () => { await clearNotifications(CURRENT_USER); };
+
+let _lastNotifKey = "";
+subscribeNotifications(CURRENT_USER, notifs => {
+  // Key on IDs + read states — skip full rebuild if nothing meaningful changed
+  const key = notifs.map(n => n.id + (n.read ? "r" : "u")).join(",");
+  if (key === _lastNotifKey) return;
+  _lastNotifKey = key;
+
+  const list = document.getElementById("notifPageList");
+  if (!notifs.length) { list.innerHTML = `<p style="color:var(--text-3);font-size:13px">No notifications yet.</p>`; return; }
+  list.innerHTML = `<div class="notif-page-list">${notifs.map(n => {
+    const icon = n.type==="mention"?"🏷":n.type==="dm"?"💬":n.type==="stage"?"📋":"🔔";
+    return `<div class="notif-page-item ${n.read?"":"unread"}" onclick="readNotif('${n.id}')">
+      <div style="font-size:16px;flex-shrink:0">${icon}</div>
+      <div style="flex:1"><div class="npi-title">${n.title}</div><div class="npi-sub">${n.message||""}</div></div>
+      <div class="npi-time">${timeAgo(n.timestamp)}</div>
+    </div>`;
+  }).join("")}</div>`;
+});
+
+window.readNotif = async id => {
+  await markNotifRead(CURRENT_USER, id);
+  location.href = "dashboard.html";
+};
+</script>
+<script>
+function openSidebar()  { document.getElementById("sidebar").classList.add("mobile-open"); document.getElementById("sidebarOverlay").classList.add("visible"); document.body.style.overflow="hidden"; }
+function closeSidebar() { document.getElementById("sidebar").classList.remove("mobile-open"); document.getElementById("sidebarOverlay").classList.remove("visible"); document.body.style.overflow=""; }
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/app-tracker/sw.js')
+      .then(r => console.log('[PWA] Service worker registered'))
+      .catch(e => console.log('[PWA] SW registration failed:', e));
+  });
+}
+</script>
+</body>
+</html>
