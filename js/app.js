@@ -4,6 +4,7 @@ import {
   getSpaceTypes, saveSpaceTypes, pushNotification,
   subscribeNotifications, markNotifRead, clearNotifications,
   subscribeSpaceConfigs, subscribeCustomSpaces, setPresence, subscribePresence, getAllUsers,
+  getSpaceConfig,
   db, ref, set as fbSet, update as fbUpdate, remove as fbRemove
 } from "./firebase.js";
 import { notifyUser } from "./notify.js";
@@ -2162,7 +2163,14 @@ window.saveProject = async function() {
   // ── Phase 2: Notifications (always run, separate try/catch) ───────────────
   try {
     if (isNew && project) {
-      const stageInfo = (SPACES[s]?.stages || []).find(st => st.id === stage);
+      let stageInfo = (SPACES[s]?.stages || []).find(st => st.id === stage);
+      // For custom spaces not yet in SPACES, fetch from Firebase
+      if (!stageInfo) {
+        try {
+          const cfg = await getSpaceConfig(s);
+          if (cfg?.stages) stageInfo = cfg.stages.find(st => st.id === stage);
+        } catch(e) {}
+      }
       // Notify stage owners
       if (stageInfo) await sendAssignmentNotif(stageInfo.owner, project, stageInfo);
       // Notify ALL other users
@@ -2584,14 +2592,23 @@ async function sendAssignmentNotif(toUser, project, stageInfo) {
 }
 
 async function notifyStageChange(project, fromId, toId) {
-  // Get the space — fall back through multiple sources
   const sp = project.space || getCurrentSpace() || "email";
 
-  // Try live SPACES first, then BASE_SPACES, then hardcoded defaults
+  // Try live SPACES first (includes custom spaces if applyAllSpaceData has run)
   let stages = SPACES[sp]?.stages || BASE_SPACES[sp]?.stages;
 
-  // If stages still not found, use email stages as fallback
-  if (!stages) stages = BASE_SPACES.email.stages;
+  // For custom spaces not yet in SPACES, load config directly from Firebase
+  if (!stages) {
+    try {
+      const cfg = await getSpaceConfig(sp);
+      if (cfg?.stages?.length) stages = cfg.stages;
+    } catch(e) {}
+  }
+
+  if (!stages) {
+    console.warn(`[Notif] No stages found for space "${sp}" — skipping notification`);
+    return;
+  }
 
   const toStage = stages.find(s => s.id === Number(toId));
   if (!toStage) {
