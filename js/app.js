@@ -1252,7 +1252,9 @@ function fvRenderAnnotatedImage(src) {
   // which now matches the image precisely — no coord drift.
   // ann-wrap is inline-block so it shrinks to exactly the image dimensions.
   // SVG sits position:absolute over that same rect — perfect coordinate alignment.
-  prevEl.style.cssText = 'display:flex;align-items:center;justify-content:center;';
+  // Reset any inline style — CSS handles layout now
+  prevEl.style.cssText = '';
+  prevEl.scrollTop = 0; // scroll to top when loading new image
   prevEl.innerHTML = `
     <div class="ann-wrap" id="fvAnnWrap">
       <img id="fvAnnImg" src="${src}" draggable="false"
@@ -1520,9 +1522,57 @@ window.fvSubmitAnnotation = async function() {
 };
 
 window.fvScrollToComment = function(cid) {
+  // 1. Scroll the comment panel to the comment
   const el = document.getElementById('fvc-'+cid);
-  if (el) { el.scrollIntoView({behavior:'smooth',block:'nearest'}); el.classList.add('flash'); setTimeout(()=>el.classList.remove('flash'),1000); }
+  if (el) {
+    el.scrollIntoView({behavior:'smooth', block:'nearest'});
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1200);
+  }
+  // 2. Scroll the image preview to the annotation position
+  fvScrollPreviewToShape(cid);
 };
+
+// Scroll the preview panel so the annotation shape is visible
+function fvScrollPreviewToShape(cid) {
+  const preview = document.getElementById('fvPreview');
+  const svg     = document.getElementById('fvAnnSvg');
+  const img     = document.getElementById('fvAnnImg');
+  if (!preview || !svg || !img) return;
+
+  // Find the shape group for this comment
+  const group = svg.querySelector(`.ann-shape[data-cid="${cid}"]`);
+  if (!group) return;
+
+  // Get the bounding box of the shape in SVG viewBox coords (0-100)
+  // We use the first shape element inside the group
+  const shape = group.querySelector('rect,ellipse,polyline,circle:first-of-type');
+  if (!shape) return;
+
+  // Get the y-percentage of the shape center from the SVG element
+  // The SVG has viewBox="0 0 100 100" and covers the full image height
+  let yPct = 50; // default to middle
+  const tag = shape.tagName.toLowerCase();
+  if (tag === 'rect' || tag === 'ellipse') {
+    const cx = parseFloat(shape.getAttribute('cx') || shape.getAttribute('x') || 50);
+    const cy = parseFloat(shape.getAttribute('cy') || shape.getAttribute('y') || 50);
+    yPct = cy;
+  } else if (tag === 'polyline') {
+    const pts = (shape.getAttribute('points') || '').split(/[, ]+/).filter(Boolean);
+    if (pts.length >= 2) yPct = parseFloat(pts[1]);
+  } else if (tag === 'circle') {
+    yPct = parseFloat(shape.getAttribute('cy') || 50);
+  }
+
+  // Convert yPct (0-100) to pixels in the image
+  const imgHeight    = img.offsetHeight;
+  const targetY      = (yPct / 100) * imgHeight;
+  const previewH     = preview.offsetHeight;
+
+  // Scroll so the shape is centered vertically in the visible area
+  const scrollTarget = targetY - (previewH / 2) + 12; // 12px = padding
+  preview.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
+}
 
 // ── Comment renderer ───────────────────────────────────────────────────────
 function fvRenderComments() {
@@ -1630,16 +1680,22 @@ function fvReplyInputHtml(parentId) {
 
 // ── Comment CRUD ───────────────────────────────────────────────────────────
 window.fvSwitchFile    = function(idx) { _fvFileIdx=idx; _fvVersionIdx=null; _annModeActive=false; _annPending=null; _vcClear(); fvRender(); };
-window.fvSwitchVersion = function(idx) { _fvVersionIdx=idx; _annModeActive=false; _annPending=null; fvRender(); };
+window.fvSwitchVersion = function(idx) { _fvVersionIdx=idx; _annModeActive=false; _annPending=null; const p=document.getElementById('fvPreview'); if(p) p.scrollTop=0; fvRender(); };
 window.fvStartReply    = function(cid) { _fvReplyingTo=cid; _fvEditingId=null; fvRenderComments(); setTimeout(()=>document.getElementById('fv-reply-'+cid)?.focus(),50); };
 window.fvCancelReply   = function()    { _fvReplyingTo=null; fvRenderComments(); };
 window.fvEditComment   = function(cid,rid) { _fvEditingId=rid||cid; _fvReplyingTo=null; fvRenderComments(); setTimeout(()=>document.getElementById('fv-edit-'+(rid||cid))?.focus(),50); };
 window.fvCancelEdit    = function()    { _fvEditingId=null; fvRenderComments(); };
 
 window.fvHighlightShape = function(cid) {
+  // Highlight the shape on the image
   document.querySelectorAll('.ann-shape').forEach(g => g.classList.remove('ann-highlight'));
   const g = document.querySelector(`.ann-shape[data-cid="${cid}"]`);
-  if (g) { g.classList.add('ann-highlight'); setTimeout(()=>g.classList.remove('ann-highlight'),1500); }
+  if (g) {
+    g.classList.add('ann-highlight');
+    setTimeout(() => g.classList.remove('ann-highlight'), 1500);
+  }
+  // Scroll preview to show this annotation
+  fvScrollPreviewToShape(cid);
 };
 
 window.fvPostComment = async function() {
