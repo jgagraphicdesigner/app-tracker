@@ -1372,6 +1372,14 @@ window.fvToggleAnnotate = function() {
 // Lightweight: only refresh SVG shapes on the existing image (no DOM rebuild, no listener rebind)
 function fvRedrawShapes() {
   const svgEl = document.getElementById('fvAnnSvg'); if (!svgEl) return;
+  const imgEl = document.getElementById('fvAnnImg');
+
+  // Ensure viewBox matches actual image dimensions before drawing
+  if (imgEl && imgEl.offsetWidth > 0) {
+    const w = imgEl.offsetWidth, h = imgEl.offsetHeight;
+    svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  }
+
   const reviews = fvGetReviews();
   const shapes  = reviews.filter(c => c.shape);
   svgEl.innerHTML = shapes.map((c, i) => fvShapeToSvg(c, i+1)).join('');
@@ -1396,13 +1404,29 @@ function fvRenderAnnotatedImage(src) {
       <img id="fvAnnImg" src="${src}" draggable="false"
            onerror="this.style.opacity='0.3'"/>
       <svg class="ann-svg-layer" id="fvAnnSvg"
-           viewBox="0 0 100 100" preserveAspectRatio="none"
+           viewBox="0 0 100 100"
            style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;border-radius:6px;pointer-events:none;"></svg>
     </div>`;
 
-  // Draw saved shapes
-  document.getElementById('fvAnnSvg').innerHTML =
-    shapes.map((c,i) => fvShapeToSvg(c, i+1)).join('');
+  // After image loads, update SVG viewBox to match actual pixel dimensions
+  // so shapes render with correct proportions (no stretching on tall images)
+  const imgEl = document.getElementById('fvAnnImg');
+  function _setupSvgViewBox() {
+    const svgEl = document.getElementById('fvAnnSvg');
+    if (!svgEl || !imgEl) return;
+    const w = imgEl.offsetWidth  || imgEl.naturalWidth  || 100;
+    const h = imgEl.offsetHeight || imgEl.naturalHeight || 100;
+    svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    // Re-draw shapes with correct coordinate space
+    svgEl.innerHTML = shapes.map((c,i) => fvShapeToSvg(c, i+1)).join('');
+  }
+  if (imgEl.complete && imgEl.naturalWidth) {
+    _setupSvgViewBox();
+  } else {
+    imgEl.addEventListener('load', _setupSvgViewBox, { once: true });
+    // Draw immediately with fallback viewBox, update after load
+    document.getElementById('fvAnnSvg').innerHTML = shapes.map((c,i) => fvShapeToSvg(c, i+1)).join('');
+  }
 
   if (_annModeActive) document.getElementById('fvAnnWrap')?.classList.add('annotate-mode');
   fvBindDrawing();
@@ -1419,48 +1443,58 @@ function fvShapeToSvg(c, num) {
   const color = '#7c5cbf';
   const isOwn = c.by === CURRENT_USER;
 
-  // Compute a scale factor so badges and strokes stay visually constant
-  // regardless of zoom level or image size.
-  // SVG viewBox is 0-100. The image's rendered pixel width tells us how many
-  // pixels correspond to 1 viewBox unit. We want a ~14px badge at all sizes.
-  const img = document.getElementById('fvAnnImg');
-  const imgPx   = img ? img.offsetWidth : 600;  // rendered px width
-  const pxPer1  = imgPx / 100;                  // px per 1 viewBox unit
-  const TARGET_BADGE_PX = 14;                   // desired badge diameter in px
-  const r = (TARGET_BADGE_PX / 2) / pxPer1;    // badge radius in viewBox units
-  const sw = Math.max(0.3, 1.5 / pxPer1);      // stroke ~1.5px visually
-  const fs = (r * 0.85);                        // font size proportional to badge
+  // Coordinates stored as 0-100 percentage values.
+  // SVG viewBox now matches actual pixel dimensions of the image.
+  // We convert percentages to pixels using the current viewBox size.
+  const svgEl = document.getElementById('fvAnnSvg');
+  const vb    = svgEl?.viewBox?.baseVal;
+  const VW    = vb?.width  || 100;   // viewBox width  (= image pixel width)
+  const VH    = vb?.height || 100;   // viewBox height (= image pixel height)
 
-  function badge(bx, by) {
-    const nx = Math.min(Math.max(bx, r+0.5), 100-r-0.5);
-    const ny = Math.min(Math.max(by, r+0.5), 100-r-0.5);
+  // Convert percentage coords to pixels
+  function px(val, axis) { return val * (axis === 'x' ? VW : VH) / 100; }
+
+  // Badge radius: target ~14px visual diameter, constant regardless of image size
+  const r   = 7;           // pixels in viewBox space (SVG pixel = screen pixel at 100% zoom)
+  const sw  = 1.5;         // stroke width in pixels — always 1.5px visually
+  const fs  = r * 1.1;     // font size in pixels
+
+  function badge(bxPx, byPx) {
+    const nx = Math.min(Math.max(bxPx, r+2), VW-r-2);
+    const ny = Math.min(Math.max(byPx, r+2), VH-r-2);
+    const gap = 2;  // gap between number badge and delete badge
     const del = isOwn
-      ? `<rect x="${nx+r+0.3}" y="${ny-r}" width="${r*2}" height="${r*2}" rx="${r*0.35}" fill="#e53e3e" style="cursor:pointer;pointer-events:all" onclick="fvDeleteAnnotation('${c.id}')"/>
-         <text x="${nx+r*2+0.3}" y="${ny+0.2}" font-size="${fs*0.9}" font-weight="900" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">✕</text>`
+      ? `<rect x="${nx+r+gap}" y="${ny-r}" width="${r*2}" height="${r*2}" rx="${r*0.4}" fill="#e53e3e" style="cursor:pointer;pointer-events:all" onclick="fvDeleteAnnotation('${c.id}')"/>
+         <text x="${nx+r*2+gap}" y="${ny+0.5}" font-size="${fs*0.85}" font-weight="900" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">✕</text>`
       : '';
     return `<circle cx="${nx}" cy="${ny}" r="${r}" fill="${color}" style="cursor:pointer;pointer-events:all" onclick="fvScrollToComment('${c.id}')"/>
-      <text x="${nx}" y="${ny+0.2}" font-size="${fs}" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">${num}</text>
+      <text x="${nx}" y="${ny+0.5}" font-size="${fs}" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">${num}</text>
       ${del}`;
   }
 
   let shape = '';
   if (s.type === 'rect') {
-    const x1 = Math.min(s.x1, s.x2), y1 = Math.min(s.y1, s.y2);
-    const w  = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1);
-    shape = `<rect x="${x1}" y="${y1}" width="${w}" height="${h}" fill="${color}22" stroke="${color}" stroke-width="${sw}" rx="${sw*0.8}"/>
+    const x1 = px(Math.min(s.x1, s.x2), 'x'), y1 = px(Math.min(s.y1, s.y2), 'y');
+    const w  = px(Math.abs(s.x2 - s.x1), 'x'), h = px(Math.abs(s.y2 - s.y1), 'y');
+    shape = `<rect x="${x1}" y="${y1}" width="${w}" height="${h}" fill="${color}22" stroke="${color}" stroke-width="${sw}" rx="2"/>
       ${badge(x1, y1)}`;
   } else if (s.type === 'circle') {
-    const rx = Math.max(Math.abs(s.rx)||2, 0.5);
-    const ry = Math.max(Math.abs(s.ry)||2, 0.5);
-    shape = `<ellipse cx="${s.cx}" cy="${s.cy}" rx="${rx}" ry="${ry}" fill="${color}22" stroke="${color}" stroke-width="${sw}"/>
-      ${badge(s.cx - rx, s.cy - ry)}`;
+    const cx = px(s.cx, 'x'), cy = px(s.cy, 'y');
+    const rx = px(Math.max(Math.abs(s.rx)||2, 1), 'x');
+    const ry = px(Math.max(Math.abs(s.ry)||2, 1), 'y');
+    shape = `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${color}22" stroke="${color}" stroke-width="${sw}"/>
+      ${badge(cx - rx, cy - ry)}`;
   } else if (s.type === 'pen') {
-    // pts = [[x,y], ...] stored as raw 0-100 values
+    // pts = [[x%,y%], ...] — convert each to pixel coords matching viewBox
     const pts = s.pts || (s.points ? s.points.split(/\s+/).reduce((a,v,i,arr)=>{ if(i%2===0)a.push([parseFloat(v),parseFloat(arr[i+1]||0)]); return a; },[]) : []);
-    const ptsStr = fvPtsToSvg(pts);
+    // Convert percentage pts to pixel coords
+    const pxPts = pts.map(p => [px(p[0],'x'), px(p[1],'y')]);
+    const ptsStr = pxPts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+    const badgeX = px(s.x0 || pts[0]?.[0] || 0, 'x');
+    const badgeY = px(s.y0 || pts[0]?.[1] || 0, 'y');
     shape = ptsStr
       ? `<polyline points="${ptsStr}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>
-         ${badge(s.x0, s.y0)}`
+         ${badge(badgeX, badgeY)}`
       : '';
   }
   return shape ? `<g class="ann-shape" data-cid="${c.id}">${shape}</g>` : '';
@@ -1494,14 +1528,14 @@ function fvBindDrawing() {
     _annSvg = document.createElementNS('http://www.w3.org/2000/svg', tag);
     _annSvg.setAttribute('fill',   '#7c5cbf22');
     _annSvg.setAttribute('stroke', '#7c5cbf');
-    // Responsive stroke width — ~1.5px visually regardless of image size
-    const _liveImg = document.getElementById('fvAnnImg');
-    const _liveSw  = _liveImg ? Math.max(0.3, 1.5 / (_liveImg.offsetWidth / 100)) : 0.6;
-    _annSvg.setAttribute('stroke-width', String(_liveSw));
+    _annSvg.setAttribute('stroke-width', '1.5'); // pixels in viewBox space = 1.5px visually
     _annSvg.setAttribute('stroke-dasharray', '5,3');
     if (_annTool === 'pen') {
       _penPtsRaw = [[_annStart.x, _annStart.y]];
-      _annSvg.setAttribute('points', `${_annStart.x.toFixed(2)},${_annStart.y.toFixed(2)}`);
+      // Start point in pixel coords
+    { const _svgD = document.getElementById('fvAnnSvg');
+      const _vbWD = _svgD?.viewBox?.baseVal?.width||100, _vbHD = _svgD?.viewBox?.baseVal?.height||100;
+      _annSvg.setAttribute('points', `${(_annStart.x*_vbWD/100).toFixed(1)},${(_annStart.y*_vbHD/100).toFixed(1)}`); }
       _annSvg.setAttribute('fill', 'none');
       _annSvg.setAttribute('stroke-linecap', 'round');
       _annSvg.setAttribute('stroke-linejoin', 'round');
@@ -1515,19 +1549,26 @@ function fvBindDrawing() {
     e.preventDefault();
     const w = getWrap(); if (!w) return;
     const cur = getPct(e, w);
+    // Convert 0-100% coords to pixel coords for the live SVG viewBox
+    const _svgLive = document.getElementById('fvAnnSvg');
+    const _vbW = _svgLive?.viewBox?.baseVal?.width  || 100;
+    const _vbH = _svgLive?.viewBox?.baseVal?.height || 100;
+    function toPx(v, axis) { return v * (axis==='x' ? _vbW : _vbH) / 100; }
+
     if (_annTool === 'rect') {
-      const x1 = Math.min(_annStart.x, cur.x), y1 = Math.min(_annStart.y, cur.y);
+      const x1 = toPx(Math.min(_annStart.x, cur.x),'x'), y1 = toPx(Math.min(_annStart.y, cur.y),'y');
       _annSvg.setAttribute('x', x1);      _annSvg.setAttribute('y', y1);
-      _annSvg.setAttribute('width',  Math.abs(cur.x-_annStart.x));
-      _annSvg.setAttribute('height', Math.abs(cur.y-_annStart.y));
+      _annSvg.setAttribute('width',  toPx(Math.abs(cur.x-_annStart.x),'x'));
+      _annSvg.setAttribute('height', toPx(Math.abs(cur.y-_annStart.y),'y'));
     } else if (_annTool === 'circle') {
-      const cx = (_annStart.x+cur.x)/2, cy = (_annStart.y+cur.y)/2;
+      const cx = toPx((_annStart.x+cur.x)/2,'x'), cy = toPx((_annStart.y+cur.y)/2,'y');
       _annSvg.setAttribute('cx', cx); _annSvg.setAttribute('cy', cy);
-      _annSvg.setAttribute('rx', Math.abs(cur.x-_annStart.x)/2);
-      _annSvg.setAttribute('ry', Math.abs(cur.y-_annStart.y)/2);
+      _annSvg.setAttribute('rx', toPx(Math.abs(cur.x-_annStart.x)/2,'x'));
+      _annSvg.setAttribute('ry', toPx(Math.abs(cur.y-_annStart.y)/2,'y'));
     } else if (_annTool === 'pen') {
       _penPtsRaw.push([cur.x, cur.y]);
-      _annSvg.setAttribute('points', _penPtsRaw.map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' '));
+      // Store as %, render as px for live preview
+      _annSvg.setAttribute('points', _penPtsRaw.map(p => `${toPx(p[0],'x').toFixed(1)},${toPx(p[1],'y').toFixed(1)}`).join(' '));
     }
   }
 
@@ -1699,23 +1740,26 @@ function fvScrollPreviewToShape(cid) {
 
   // Get the y-percentage of the shape center from the SVG element
   // The SVG has viewBox="0 0 100 100" and covers the full image height
-  let yPct = 50; // default to middle
+  // Coords are now in pixel space (matching viewBox = image pixel dims)
+  // Read the pixel y position from the shape and convert to scroll position
+  let yPx = img.offsetHeight / 2; // default to middle
   const tag = shape.tagName.toLowerCase();
-  if (tag === 'rect' || tag === 'ellipse') {
-    const cx = parseFloat(shape.getAttribute('cx') || shape.getAttribute('x') || 50);
-    const cy = parseFloat(shape.getAttribute('cy') || shape.getAttribute('y') || 50);
-    yPct = cy;
+  const svgForScroll = document.getElementById('fvAnnSvg');
+  const vbH = svgForScroll?.viewBox?.baseVal?.height || img.offsetHeight || 100;
+
+  if (tag === 'rect') {
+    yPx = (parseFloat(shape.getAttribute('y') || 0) / vbH) * img.offsetHeight;
+  } else if (tag === 'ellipse') {
+    yPx = (parseFloat(shape.getAttribute('cy') || 0) / vbH) * img.offsetHeight;
   } else if (tag === 'polyline') {
-    const pts = (shape.getAttribute('points') || '').split(/[, ]+/).filter(Boolean);
-    if (pts.length >= 2) yPct = parseFloat(pts[1]);
+    const pts = (shape.getAttribute('points') || '').split(/[,\s]+/).filter(Boolean);
+    if (pts.length >= 2) yPx = (parseFloat(pts[1]) / vbH) * img.offsetHeight;
   } else if (tag === 'circle') {
-    yPct = parseFloat(shape.getAttribute('cy') || 50);
+    yPx = (parseFloat(shape.getAttribute('cy') || 0) / vbH) * img.offsetHeight;
   }
 
-  // Convert yPct (0-100) to pixels in the zoomed image
-  // img.offsetHeight = rendered height at current zoom (since we use layout width)
-  const imgHeight    = img.offsetHeight;
-  const targetY      = (yPct / 100) * imgHeight;
+  const imgHeight = img.offsetHeight;
+  const targetY   = yPx;
   const previewH     = preview.offsetHeight;
 
   // Scroll so the shape is centered vertically in the visible area
