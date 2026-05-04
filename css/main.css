@@ -387,6 +387,13 @@ code { font-family:monospace; background:var(--surface2); padding:1px 5px; borde
 .ann-tool-btn:hover { background:var(--surface); color:var(--text-1); }
 .ann-tool-btn.active { background:var(--purple-dim); color:var(--purple); }
 
+/* Pan mode cursor */
+.fv-pan-mode { cursor: grab !important; }
+.fv-pan-mode .ann-wrap { cursor: grab !important; }
+.fv-pan-mode .ann-svg-layer { pointer-events: none !important; }
+.fv-panning,
+.fv-panning .ann-wrap { cursor: grabbing !important; user-select: none; }
+
 /* Zoom controls */
 .fv-zoom-group { display:flex; align-items:center; gap:0; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
 .fv-zoom-btn { background:none; border:none; border-right:1px solid var(--border); width:28px; height:28px; cursor:pointer; font-size:16px; font-weight:600; color:var(--text-2); display:flex; align-items:center; justify-content:center; transition:background .12s; line-height:1; }

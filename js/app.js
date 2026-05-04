@@ -828,6 +828,7 @@ window.viewFile = function(projectId, fileIdx) {
   _fvRedrawingCid = null;
   _penPtsRaw      = [];
   _fvZoom         = 1.0;
+  _fvPanMode      = false;
   // Clear version cache so we always load fresh data from Firebase on open
   Object.keys(_fvVersionCache).forEach(k => delete _fvVersionCache[k]);
   // Pre-populate local cache from Firebase subscription data
@@ -903,6 +904,7 @@ let _annTextInput  = null;     // popup element
 let _fvRedrawingCid = null;    // cid of annotation being redrawn
 let _penPtsRaw     = [];       // raw [x,y] pairs collected during pen draw
 let _fvZoom        = 1.0;      // current zoom level (1.0 = fit to width)
+let _fvPanMode     = false;    // true when hand/pan tool is active
 
 // ── Local version cache ────────────────────────────────────────────────────
 // Keyed by "projectId/fileIdx" → array of version objects
@@ -1200,6 +1202,8 @@ function fvRender() {
     acEl.innerHTML = `
       <button class="btn-ghost" style="font-size:12px" onclick="fvDownloadCurrent()">⬇ Download</button>
       <div class="ann-toolbar" id="annToolbar">
+        <button class="ann-tool-btn ${_fvPanMode?'active':''}" onclick="fvTogglePan()" title="Pan / drag to scroll">✋</button>
+        <span style="width:1px;background:var(--border);height:16px;margin:0 2px;display:inline-block"></span>
         <button class="ann-tool-btn ${_annTool==='rect'?'active':''}" onclick="fvSetTool('rect')" title="Rectangle">⬜</button>
         <button class="ann-tool-btn ${_annTool==='circle'?'active':''}" onclick="fvSetTool('circle')" title="Circle">⭕</button>
         <button class="ann-tool-btn ${_annTool==='pen'?'active':''}" onclick="fvSetTool('pen')" title="Freehand">✏️</button>
@@ -1284,6 +1288,57 @@ window.fvZoomFit = function() {
   if (p) p.scrollTop = 0;
 };
 
+// ── Pan mode (drag to scroll) ──────────────────────────────────────────────
+window.fvTogglePan = function() {
+  _fvPanMode = !_fvPanMode;
+  const preview = document.getElementById('fvPreview');
+  if (!preview) return;
+  preview.classList.toggle('fv-pan-mode', _fvPanMode);
+  // Disable annotation mode when entering pan mode
+  if (_fvPanMode && _annModeActive) {
+    _annModeActive = false;
+    document.getElementById('fvAnnotateBtn')?.classList.remove('active');
+    document.getElementById('fvAnnWrap')?.classList.remove('annotate-mode');
+  }
+  // Update toolbar button state
+  const panBtn = document.querySelector('.ann-tool-btn[onclick="fvTogglePan()"]');
+  if (panBtn) panBtn.classList.toggle('active', _fvPanMode);
+};
+
+// Pan drag state
+let _panDragging = false;
+let _panStartX   = 0;
+let _panStartY   = 0;
+let _panScrollX  = 0;
+let _panScrollY  = 0;
+
+document.addEventListener('mousedown', e => {
+  const preview = document.getElementById('fvPreview');
+  if (!_fvPanMode || !preview?.contains(e.target)) return;
+  e.preventDefault();
+  _panDragging = true;
+  _panStartX   = e.clientX;
+  _panStartY   = e.clientY;
+  _panScrollX  = preview.scrollLeft;
+  _panScrollY  = preview.scrollTop;
+  preview.classList.add('fv-panning');
+});
+
+document.addEventListener('mousemove', e => {
+  if (!_panDragging) return;
+  const preview = document.getElementById('fvPreview');
+  if (!preview) return;
+  e.preventDefault();
+  preview.scrollLeft = _panScrollX - (e.clientX - _panStartX);
+  preview.scrollTop  = _panScrollY - (e.clientY - _panStartY);
+});
+
+document.addEventListener('mouseup', () => {
+  if (!_panDragging) return;
+  _panDragging = false;
+  document.getElementById('fvPreview')?.classList.remove('fv-panning');
+});
+
 // Mouse wheel zoom in preview (Ctrl/Cmd + scroll)
 document.addEventListener('wheel', e => {
   if (!e.ctrlKey && !e.metaKey) return;
@@ -1364,18 +1419,27 @@ function fvShapeToSvg(c, num) {
   const color = '#7c5cbf';
   const isOwn = c.by === CURRENT_USER;
 
-  // All coordinates are in viewBox space (0-100), NO % units needed
+  // Compute a scale factor so badges and strokes stay visually constant
+  // regardless of zoom level or image size.
+  // SVG viewBox is 0-100. The image's rendered pixel width tells us how many
+  // pixels correspond to 1 viewBox unit. We want a ~14px badge at all sizes.
+  const img = document.getElementById('fvAnnImg');
+  const imgPx   = img ? img.offsetWidth : 600;  // rendered px width
+  const pxPer1  = imgPx / 100;                  // px per 1 viewBox unit
+  const TARGET_BADGE_PX = 14;                   // desired badge diameter in px
+  const r = (TARGET_BADGE_PX / 2) / pxPer1;    // badge radius in viewBox units
+  const sw = Math.max(0.3, 1.5 / pxPer1);      // stroke ~1.5px visually
+  const fs = (r * 0.85);                        // font size proportional to badge
+
   function badge(bx, by) {
-    const nx = Math.min(Math.max(bx, 2), 96);
-    const ny = Math.min(Math.max(by, 2), 96);
-    const r  = 3.5;  // number badge radius
-    // Delete box: sits right beside number badge, same height
+    const nx = Math.min(Math.max(bx, r+0.5), 100-r-0.5);
+    const ny = Math.min(Math.max(by, r+0.5), 100-r-0.5);
     const del = isOwn
-      ? `<rect x="${nx+r+0.8}" y="${ny-r}" width="${r*2}" height="${r*2}" rx="1.2" fill="#e53e3e" style="cursor:pointer;pointer-events:all" onclick="fvDeleteAnnotation('${c.id}')"/>
-         <text x="${nx+r+0.8+r}" y="${ny+0.3}" font-size="3.8" font-weight="900" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">✕</text>`
+      ? `<rect x="${nx+r+0.3}" y="${ny-r}" width="${r*2}" height="${r*2}" rx="${r*0.35}" fill="#e53e3e" style="cursor:pointer;pointer-events:all" onclick="fvDeleteAnnotation('${c.id}')"/>
+         <text x="${nx+r*2+0.3}" y="${ny+0.2}" font-size="${fs*0.9}" font-weight="900" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">✕</text>`
       : '';
     return `<circle cx="${nx}" cy="${ny}" r="${r}" fill="${color}" style="cursor:pointer;pointer-events:all" onclick="fvScrollToComment('${c.id}')"/>
-      <text x="${nx}" y="${ny+0.3}" font-size="3.5" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">${num}</text>
+      <text x="${nx}" y="${ny+0.2}" font-size="${fs}" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">${num}</text>
       ${del}`;
   }
 
@@ -1383,19 +1447,19 @@ function fvShapeToSvg(c, num) {
   if (s.type === 'rect') {
     const x1 = Math.min(s.x1, s.x2), y1 = Math.min(s.y1, s.y2);
     const w  = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1);
-    shape = `<rect x="${x1}" y="${y1}" width="${w}" height="${h}" fill="${color}22" stroke="${color}" stroke-width="0.5" rx="0.8"/>
+    shape = `<rect x="${x1}" y="${y1}" width="${w}" height="${h}" fill="${color}22" stroke="${color}" stroke-width="${sw}" rx="${sw*0.8}"/>
       ${badge(x1, y1)}`;
   } else if (s.type === 'circle') {
     const rx = Math.max(Math.abs(s.rx)||2, 0.5);
     const ry = Math.max(Math.abs(s.ry)||2, 0.5);
-    shape = `<ellipse cx="${s.cx}" cy="${s.cy}" rx="${rx}" ry="${ry}" fill="${color}22" stroke="${color}" stroke-width="0.5"/>
+    shape = `<ellipse cx="${s.cx}" cy="${s.cy}" rx="${rx}" ry="${ry}" fill="${color}22" stroke="${color}" stroke-width="${sw}"/>
       ${badge(s.cx - rx, s.cy - ry)}`;
   } else if (s.type === 'pen') {
     // pts = [[x,y], ...] stored as raw 0-100 values
     const pts = s.pts || (s.points ? s.points.split(/\s+/).reduce((a,v,i,arr)=>{ if(i%2===0)a.push([parseFloat(v),parseFloat(arr[i+1]||0)]); return a; },[]) : []);
     const ptsStr = fvPtsToSvg(pts);
     shape = ptsStr
-      ? `<polyline points="${ptsStr}" fill="none" stroke="${color}" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round"/>
+      ? `<polyline points="${ptsStr}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>
          ${badge(s.x0, s.y0)}`
       : '';
   }
@@ -1430,7 +1494,10 @@ function fvBindDrawing() {
     _annSvg = document.createElementNS('http://www.w3.org/2000/svg', tag);
     _annSvg.setAttribute('fill',   '#7c5cbf22');
     _annSvg.setAttribute('stroke', '#7c5cbf');
-    _annSvg.setAttribute('stroke-width', '0.6');
+    // Responsive stroke width — ~1.5px visually regardless of image size
+    const _liveImg = document.getElementById('fvAnnImg');
+    const _liveSw  = _liveImg ? Math.max(0.3, 1.5 / (_liveImg.offsetWidth / 100)) : 0.6;
+    _annSvg.setAttribute('stroke-width', String(_liveSw));
     _annSvg.setAttribute('stroke-dasharray', '5,3');
     if (_annTool === 'pen') {
       _penPtsRaw = [[_annStart.x, _annStart.y]];
