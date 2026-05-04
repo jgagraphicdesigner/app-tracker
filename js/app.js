@@ -1235,18 +1235,30 @@ const FV_ZOOM_MAX   = 3.0;
 
 function fvApplyZoom() {
   const wrap = document.getElementById('fvAnnWrap');
-  if (!wrap) return;
+  const img  = document.getElementById('fvAnnImg');
+  if (!wrap || !img) return;
+
+  // Use explicit pixel width on the wrap — this correctly affects scroll height
+  // unlike CSS transform which is visual-only and doesn't expand scroll area.
+  // At 100% zoom: wrap fills preview width (minus padding).
+  // At 200% zoom: wrap is 200% of preview width → horizontal scroll appears,
+  //   and vertical height doubles → vertical scroll reflects true zoomed size.
+  const preview = document.getElementById('fvPreview');
+  if (!preview) return;
+
+  // Remove transform — we use layout width only
+  wrap.style.transform       = '';
+  wrap.style.transformOrigin = '';
+
   if (_fvZoom === 1.0) {
-    wrap.style.transform       = '';
-    wrap.style.transformOrigin = '';
-    wrap.style.width           = '';
+    wrap.style.width    = '';   // let CSS rule (width:100%) take over
+    img.style.width     = '';
   } else {
-    // Scale from top-left so image grows downward/rightward — natural for scrolling
-    wrap.style.transformOrigin = 'top left';
-    wrap.style.transform       = `scale(${_fvZoom})`;
-    // Expand the wrap's layout footprint so the scrollable container gets the right height
-    wrap.style.width           = `${100 / _fvZoom}%`;
+    // Explicit width as % of preview's scrollable area
+    wrap.style.width    = `${_fvZoom * 100}%`;
+    img.style.width     = '100%';  // img fills the wrap
   }
+
   // Update the zoom % label without full re-render
   const btn = document.querySelector('.fv-zoom-pct');
   if (btn) btn.textContent = `${Math.round(_fvZoom * 100)}%`;
@@ -1633,13 +1645,15 @@ function fvScrollPreviewToShape(cid) {
     yPct = parseFloat(shape.getAttribute('cy') || 50);
   }
 
-  // Convert yPct (0-100) to pixels in the image
+  // Convert yPct (0-100) to pixels in the zoomed image
+  // img.offsetHeight = rendered height at current zoom (since we use layout width)
   const imgHeight    = img.offsetHeight;
   const targetY      = (yPct / 100) * imgHeight;
   const previewH     = preview.offsetHeight;
 
   // Scroll so the shape is centered vertically in the visible area
-  const scrollTarget = targetY - (previewH / 2) + 12; // 12px = padding
+  // Add padding offset (12px) so it's not flush against the edge
+  const scrollTarget = targetY - (previewH / 2) + 12;
   preview.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
 }
 
