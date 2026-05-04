@@ -388,6 +388,14 @@ code { font-family:monospace; background:var(--surface2); padding:1px 5px; borde
 .ann-tool-btn:hover { background:var(--surface); color:var(--text-1); }
 .ann-tool-btn.active { background:var(--purple-dim); color:var(--purple); }
 
+/* Zoom controls */
+.fv-zoom-group { display:flex; align-items:center; gap:0; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); overflow:hidden; }
+.fv-zoom-btn { background:none; border:none; border-right:1px solid var(--border); width:28px; height:28px; cursor:pointer; font-size:16px; font-weight:600; color:var(--text-2); display:flex; align-items:center; justify-content:center; transition:background .12s; line-height:1; }
+.fv-zoom-btn:last-child { border-right:none; border-left:1px solid var(--border); }
+.fv-zoom-btn:hover { background:var(--surface); color:var(--text-1); }
+.fv-zoom-pct { background:none; border:none; min-width:44px; height:28px; cursor:pointer; font-size:11px; font-weight:700; color:var(--text-2); padding:0 4px; text-align:center; transition:background .12s, color .12s; }
+.fv-zoom-pct:hover { background:var(--purple-dim); color:var(--purple); }
+
 /* Annotate mode cursor */
 .annotate-mode { cursor:crosshair !important; }
 .annotate-mode * { cursor:crosshair !important; }

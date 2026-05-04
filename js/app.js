@@ -827,6 +827,7 @@ window.viewFile = function(projectId, fileIdx) {
   _annPending     = null;
   _fvRedrawingCid = null;
   _penPtsRaw      = [];
+  _fvZoom         = 1.0;
   // Clear version cache so we always load fresh data from Firebase on open
   Object.keys(_fvVersionCache).forEach(k => delete _fvVersionCache[k]);
   // Pre-populate local cache from Firebase subscription data
@@ -901,6 +902,7 @@ let _annPending    = null;     // shape data awaiting text input
 let _annTextInput  = null;     // popup element
 let _fvRedrawingCid = null;    // cid of annotation being redrawn
 let _penPtsRaw     = [];       // raw [x,y] pairs collected during pen draw
+let _fvZoom        = 1.0;      // current zoom level (1.0 = fit to width)
 
 // ── Local version cache ────────────────────────────────────────────────────
 // Keyed by "projectId/fileIdx" → array of version objects
@@ -1186,6 +1188,14 @@ function fvRender() {
 
   // Actions bar — show annotation toolbar only for images
   const acEl = document.getElementById('fvActions');
+  const zoomPct = Math.round(_fvZoom * 100);
+  const zoomControls = `
+    <div class="fv-zoom-group">
+      <button class="fv-zoom-btn" onclick="fvZoomOut()" title="Zoom out">−</button>
+      <button class="fv-zoom-pct" onclick="fvZoomFit()" title="Reset to fit width">${zoomPct}%</button>
+      <button class="fv-zoom-btn" onclick="fvZoomIn()" title="Zoom in">+</button>
+    </div>`;
+
   if (isImage) {
     acEl.innerHTML = `
       <button class="btn-ghost" style="font-size:12px" onclick="fvDownloadCurrent()">⬇ Download</button>
@@ -1196,6 +1206,7 @@ function fvRender() {
         <button id="fvAnnotateBtn" class="${_annDrawing||_annPending?'ann-tool-btn active':'ann-tool-btn'}" onclick="fvToggleAnnotate()" title="Draw annotation">Annotate</button>
         <button class="ann-tool-btn" onclick="fvClearAllAnnotations()" title="Clear all annotations" style="color:var(--rev-fg)">🗑</button>
       </div>
+      ${zoomControls}
       <label class="btn-ghost" style="font-size:12px;cursor:pointer">
         ↑ New version
         <input type="file" id="fvUploadInput" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="fvUploadNewVersion(event)"/>
@@ -1203,8 +1214,12 @@ function fvRender() {
   } else {
     acEl.innerHTML = `
       <button class="btn-ghost" style="font-size:12px" onclick="fvDownloadCurrent()">⬇ Download</button>
+      ${zoomControls}
       <label class="btn-ghost" style="font-size:12px;cursor:pointer">↑ New version<input type="file" id="fvUploadInput" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="fvUploadNewVersion(event)"/></label>`;
   }
+
+  // Apply current zoom to image wrap
+  fvApplyZoom();
 
   // Comments
   fvRenderComments();
@@ -1212,6 +1227,60 @@ function fvRender() {
 
 // ── Annotation rendering ───────────────────────────────────────────────────
 let _annModeActive = false;
+
+// ── Zoom controls ──────────────────────────────────────────────────────────
+const FV_ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
+const FV_ZOOM_MIN   = 0.25;
+const FV_ZOOM_MAX   = 3.0;
+
+function fvApplyZoom() {
+  const wrap = document.getElementById('fvAnnWrap');
+  if (!wrap) return;
+  if (_fvZoom === 1.0) {
+    wrap.style.transform       = '';
+    wrap.style.transformOrigin = '';
+    wrap.style.width           = '';
+  } else {
+    // Scale from top-left so image grows downward/rightward — natural for scrolling
+    wrap.style.transformOrigin = 'top left';
+    wrap.style.transform       = `scale(${_fvZoom})`;
+    // Expand the wrap's layout footprint so the scrollable container gets the right height
+    wrap.style.width           = `${100 / _fvZoom}%`;
+  }
+  // Update the zoom % label without full re-render
+  const btn = document.querySelector('.fv-zoom-pct');
+  if (btn) btn.textContent = `${Math.round(_fvZoom * 100)}%`;
+}
+
+window.fvZoomIn = function() {
+  const next = FV_ZOOM_STEPS.find(z => z > _fvZoom + 0.01);
+  _fvZoom = next !== undefined ? next : FV_ZOOM_MAX;
+  fvApplyZoom();
+};
+
+window.fvZoomOut = function() {
+  const prev = [...FV_ZOOM_STEPS].reverse().find(z => z < _fvZoom - 0.01);
+  _fvZoom = prev !== undefined ? prev : FV_ZOOM_MIN;
+  fvApplyZoom();
+};
+
+window.fvZoomFit = function() {
+  _fvZoom = 1.0;
+  fvApplyZoom();
+  // Scroll back to top when resetting
+  const p = document.getElementById('fvPreview');
+  if (p) p.scrollTop = 0;
+};
+
+// Mouse wheel zoom in preview (Ctrl/Cmd + scroll)
+document.addEventListener('wheel', e => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  const preview = document.getElementById('fvPreview');
+  if (!preview?.contains(e.target)) return;
+  e.preventDefault();
+  if (e.deltaY < 0) window.fvZoomIn();
+  else window.fvZoomOut();
+}, { passive: false });
 
 window.fvSetTool = function(tool) {
   _annTool = tool;
@@ -1679,8 +1748,8 @@ function fvReplyInputHtml(parentId) {
 }
 
 // ── Comment CRUD ───────────────────────────────────────────────────────────
-window.fvSwitchFile    = function(idx) { _fvFileIdx=idx; _fvVersionIdx=null; _annModeActive=false; _annPending=null; _vcClear(); fvRender(); };
-window.fvSwitchVersion = function(idx) { _fvVersionIdx=idx; _annModeActive=false; _annPending=null; const p=document.getElementById('fvPreview'); if(p) p.scrollTop=0; fvRender(); };
+window.fvSwitchFile    = function(idx) { _fvFileIdx=idx; _fvVersionIdx=null; _annModeActive=false; _annPending=null; _fvZoom=1.0; _vcClear(); fvRender(); };
+window.fvSwitchVersion = function(idx) { _fvVersionIdx=idx; _annModeActive=false; _annPending=null; _fvZoom=1.0; const p=document.getElementById('fvPreview'); if(p) p.scrollTop=0; fvRender(); };
 window.fvStartReply    = function(cid) { _fvReplyingTo=cid; _fvEditingId=null; fvRenderComments(); setTimeout(()=>document.getElementById('fv-reply-'+cid)?.focus(),50); };
 window.fvCancelReply   = function()    { _fvReplyingTo=null; fvRenderComments(); };
 window.fvEditComment   = function(cid,rid) { _fvEditingId=rid||cid; _fvReplyingTo=null; fvRenderComments(); setTimeout(()=>document.getElementById('fv-edit-'+(rid||cid))?.focus(),50); };
