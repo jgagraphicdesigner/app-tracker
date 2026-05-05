@@ -482,7 +482,7 @@ function renderBoard() {
     col.className = `stage-col ${stage.key}`;
     col.innerHTML = `
       <div class="stage-head">
-        <div>
+        <div class="stage-head-inner">
           <div class="stage-step">Step ${stage.id}</div>
           <div class="stage-name">${stage.name}</div>
           <div class="stage-owner">${

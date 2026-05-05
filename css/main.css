@@ -1720,3 +1720,376 @@ button, a, .task-card, .member-btn, .chat-room-item {
 .lib-file-card, .canva-link-card {
   contain: layout style paint;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   MOBILE UX OVERHAUL — deep pass
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Touch targets: every tappable element ≥ 44px ────────────── */
+@media (max-width: 768px) {
+
+  /* Minimum tap height for all interactive elements */
+  button, .nav-item, .space-nav-item, .bn-item,
+  .filter-btn, .seg-btn, .badge, .stage-head,
+  .task-card, .chat-room-item, .library-folder,
+  .canva-cat-btn, .people-option, .member-btn,
+  .checklist-item, .detail-link-row,
+  .notif-item, .pdc-task-row {
+    min-height: 44px;
+  }
+
+  /* ── Topbar ────────────────────────────────────────────────── */
+  .topbar { height: 56px; }
+  .hamburger { width: 44px; height: 44px; }
+
+  /* ── Bottom nav — larger tap targets ─────────────────────── */
+  .bottom-nav { height: 68px; }
+  .bn-item { min-height: 60px; padding: 8px 6px; }
+  .bn-item svg { width: 24px; height: 24px; }
+
+  /* ── Buttons — full finger width ─────────────────────────── */
+  .btn-primary, .btn-ghost, .btn-advance, .btn-danger {
+    min-height: 44px;
+    padding: 0 18px;
+    font-size: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── Filter pills row ─────────────────────────────────────── */
+  .filter-btn {
+    min-height: 36px;
+    height: 36px;
+    padding: 0 14px;
+    font-size: 13px;
+    border-radius: 20px;
+  }
+
+  /* ── Stat cards — 2 columns, proper sizing ────────────────── */
+  .stats-grid { grid-template-columns: repeat(2,1fr); gap: 8px; }
+  .stat-card  { padding: 14px; }
+  .stat-val   { font-size: 28px; font-weight: 700; }
+  .stat-label { font-size: 12px; }
+
+  /* ── Board stage heads — bigger tap, clear collapse cue ───── */
+  .stage-head {
+    min-height: 56px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+  }
+  .stage-head-inner {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .stage-name  { font-size: 14px; font-weight: 600; }
+  .stage-step  { font-size: 10px; font-weight: 600; opacity: .6; }
+  .stage-owner { font-size: 11px; opacity: .7; margin-top: 0; }
+
+  /* ── Task cards — comfortable tap ────────────────────────── */
+  .task-card { padding: 14px; }
+  .tc-name   { font-size: 15px; line-height: 1.4; }
+  .badge     { font-size: 11px; padding: 3px 8px; min-height: 22px; }
+
+  /* "Pass to X" and action buttons inside detail — full width ─ */
+  .btn-advance { width: 100%; border-radius: var(--radius-sm); }
+  #detailFooter { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+  #detailFooter > div {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #detailFooter .btn-ghost,
+  #detailFooter .btn-danger {
+    width: 100%;
+  }
+
+  /* ── Modal — safe area bottom padding ────────────────────── */
+  .modal {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .modal-footer {
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    flex-direction: column;
+  }
+  .modal-footer button {
+    width: 100%;
+    min-height: 48px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  /* ── Form fields — 16px prevents iOS zoom ────────────────── */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  .field-input, .field-select {
+    padding: 13px 12px !important;
+    font-size: 16px !important;
+    border-radius: var(--radius-sm);
+    min-height: 48px;
+  }
+  textarea.field-input {
+    min-height: 90px;
+    font-size: 15px !important;
+  }
+  .pin-input { font-size: 24px; letter-spacing: 12px; }
+
+  /* ── Space settings stage rows ──────────────────────────── */
+  .stage-edit-row {
+    flex-wrap: wrap;
+    padding: 12px 0;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .stage-num {
+    width: 28px; height: 28px;
+    font-size: 12px;
+    flex-shrink: 0;
+    margin-top: 10px; /* align with input */
+  }
+  .stage-name-input {
+    flex: 1;
+    min-width: calc(100% - 44px); /* full row on first line */
+    font-size: 16px !important;
+    padding: 11px 13px !important;
+    min-height: 46px;
+  }
+  /* People picker takes full width on second line */
+  .people-picker {
+    width: 100%;
+    min-width: 100%;
+  }
+  .people-selected {
+    min-height: 46px;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+  .people-tag { font-size: 12px; padding: 4px 8px; }
+  .people-option { padding: 12px 14px; font-size: 14px; min-height: 48px; }
+  .people-tag-remove { font-size: 16px; padding: 4px; }
+  .stage-del-btn {
+    width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    border-radius: var(--radius-sm);
+    margin-left: auto;
+  }
+  .stage-add-btn {
+    min-height: 48px;
+    font-size: 14px;
+    padding: 12px;
+    margin-top: 8px;
+  }
+  /* Space card save button — full width on mobile */
+  #settingsBody .btn-primary {
+    width: 100%;
+    min-height: 48px;
+  }
+  #settingsBody .profile-card > div:first-child {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* ── Email Builder ────────────────────────────────────────── */
+  .eb-wrap { flex-direction: column; gap: 0; }
+  .eb-left, .eb-right { width: 100% !important; position: static !important; }
+
+  /* Mode tabs — bigger tap */
+  .mode-tabs { margin-bottom: 2px; }
+  .mode-tab  {
+    font-size: 13px;
+    padding: 12px 6px;
+    min-height: 44px;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* RTE toolbar — scrollable row */
+  .rte-toolbar {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .rte-toolbar::-webkit-scrollbar { display: none; }
+  .tb-btn {
+    flex-shrink: 0;
+    min-width: 36px; min-height: 36px;
+    padding: 6px 9px;
+    font-size: 13px;
+  }
+  .rte-toolbar select {
+    flex-shrink: 0;
+    font-size: 13px;
+    min-height: 36px;
+    padding: 6px 8px;
+  }
+
+  /* Editor area */
+  .rte-editor {
+    min-height: 260px;
+    font-size: 15px !important;
+    padding: 14px !important;
+    line-height: 1.65;
+  }
+
+  /* Right panel — preview shown as collapsible section */
+  .eb-right {
+    border-top: 2px solid var(--border);
+    padding-top: 12px;
+    margin-top: 4px;
+  }
+
+  /* Preview iframe full width */
+  #previewFrame { min-height: 340px !important; }
+
+  /* ── Notifications page ───────────────────────────────────── */
+  .notif-page-item {
+    padding: 14px 16px;
+    gap: 12px;
+    min-height: 64px;
+  }
+  .npi-title { font-size: 14px; font-weight: 500; }
+  .npi-sub   { font-size: 13px; }
+  .npi-time  { font-size: 11px; }
+  .notif-action-btn {
+    min-height: 36px;
+    padding: 8px 14px;
+    font-size: 12px;
+    margin-top: 8px;
+    border-radius: 8px;
+  }
+
+  /* ── People page ─────────────────────────────────────────── */
+  .people-grid { grid-template-columns: 1fr; gap: 10px; }
+  .person-card { padding: 16px; }
+  .person-name { font-size: 16px; }
+  .person-role { font-size: 13px; }
+
+  /* ── Profile ──────────────────────────────────────────────── */
+  .profile-card { padding: 16px; }
+  .profile-card h3 { font-size: 15px; }
+
+  /* ── Chat ─────────────────────────────────────────────────── */
+  .chat-input-row input { font-size: 16px !important; min-height: 48px; }
+  .chat-send-btn { width: 48px; height: 48px; }
+  .chat-bubble { font-size: 15px; line-height: 1.5; }
+
+  /* Chat room list horizontal scrolling on mobile */
+  .chat-sidebar {
+    max-height: 180px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chat-room-list {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 6px 8px;
+    gap: 6px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .chat-room-list::-webkit-scrollbar { display: none; }
+  .chat-room-item {
+    flex-direction: column;
+    align-items: center;
+    min-width: 72px;
+    padding: 8px 6px;
+    border-radius: var(--radius);
+    text-align: center;
+    gap: 5px;
+  }
+  .chat-room-icon { width: 36px !important; height: 36px !important; font-size: 18px !important; }
+  .chat-room-name { font-size: 11px; white-space: normal; line-height: 1.2; }
+  .chat-room-badge { position: absolute; top: 4px; right: 4px; }
+  .chat-room-section-label { display: none; }
+  .chat-section-divider { display: none; }
+  .chat-new-group-btn { display: none; } /* moved to a + icon in header */
+
+  /* Chat main — full height minus horizontal room list */
+  .chat-main { height: calc(100vh - 230px) !important; min-height: 300px; }
+
+  /* ── File library ─────────────────────────────────────────── */
+  .library-grid { grid-template-columns: repeat(2,1fr); gap: 10px; }
+  .library-file-card { border-radius: var(--radius); }
+  .lf-thumb { aspect-ratio: 1/1; }
+
+  /* ── Main dashboard ───────────────────────────────────────── */
+  .main-dash-grid { grid-template-columns: 1fr; }
+  .pdc-task-row { min-height: 44px; padding: 10px 10px; }
+
+  /* ── Login ────────────────────────────────────────────────── */
+  .login-page { padding: 1rem; align-items: flex-start; padding-top: 2rem; }
+  .login-card { padding: 1.5rem; }
+  .member-btn { min-height: 72px; padding: 10px 4px; }
+  .mb-name    { font-size: 12px; }
+
+  /* ── PWA install banner ───────────────────────────────────── */
+  #pwa-install-banner {
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    left: 10px; right: 10px; max-width: unset;
+  }
+
+  /* ── Centre toast ─────────────────────────────────────────── */
+  #toast {
+    width: calc(100vw - 48px);
+    max-width: 320px;
+    padding: 24px 28px;
+    border-radius: 18px;
+  }
+  #toast .toast-icon { font-size: 36px; }
+  #toast .toast-msg  { font-size: 15px; }
+  #toast .toast-sub  { font-size: 13px; }
+
+  /* ── Completed section ────────────────────────────────────── */
+  .completed-card { min-height: 44px; padding: 12px 14px; }
+  .completed-name { font-size: 14px; }
+
+  /* ── Detail modal internal sections ──────────────────────── */
+  .detail-grid { gap: 10px; }
+  .df-label { font-size: 12px; letter-spacing: .3px; }
+  .df-val   { font-size: 15px; }
+
+  /* ── Checklist in detail modal ────────────────────────────── */
+  .checklist-item { min-height: 44px; align-items: center; }
+  .checklist-item input[type="checkbox"] { width: 22px; height: 22px; }
+  .checklist-item-text { font-size: 15px; }
+
+  /* ── Seg btn group (type selector) ───────────────────────── */
+  .seg-group { display: grid; grid-template-columns: repeat(2,1fr); gap: 6px; }
+  .seg-btn   { min-height: 44px; justify-content: center; display: flex; align-items: center; }
+
+  /* ── Space overview cards ─────────────────────────────────── */
+  .space-overview-card { padding: 16px; }
+  .space-ov-val   { font-size: 24px; }
+
+}
+
+/* ── Extra small: < 380px ─────────────────────────────────────── */
+@media (max-width: 380px) {
+  .topbar-title   { font-size: 14px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal-footer button { font-size: 14px; min-height: 46px; }
+  .stage-name-input { font-size: 15px !important; }
+  .people-tag { font-size: 11px; }
+  .library-grid { grid-template-columns: repeat(2,1fr); gap: 8px; }
+  .stat-val { font-size: 24px; }
+  .bn-item { padding: 6px 4px; }
+  .bn-item svg { width: 22px; height: 22px; }
+  .filter-btn { font-size: 12px; padding: 0 10px; }
+}
+
+/* ── Landscape on phone (short height) ────────────────────────── */
+@media (max-width: 768px) and (max-height: 500px) {
+  .modal { max-height: 98vh !important; }
+  .modal-body { padding: 10px 14px; gap: 8px; }
+  .chat-main { height: calc(100vh - 140px) !important; }
+  .stats-grid { grid-template-columns: repeat(4,1fr); }
+  .bottom-nav { height: 52px; }
+  .bn-item { min-height: 44px; }
+}

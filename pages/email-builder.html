@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
+  <link rel="icon" type="image/x-icon" href="../assets/favicon.ico"/>
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png"/>
+  <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon-16.png"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
 <meta name="theme-color" content="#2a1a3a"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -458,7 +461,10 @@
     </div><!-- /eb-left -->
 
     <!-- ── RIGHT ── -->
-    <div class="eb-right">
+    <button id="mobilePreviewToggle" onclick="toggleMobilePreview()" style="display:none;width:100%;padding:12px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;margin-bottom:4px;text-align:left">
+      👁 Show Preview &amp; Templates ▾
+    </button>
+    <div class="eb-right" id="ebRight">
 
       <!-- Live preview -->
       <div class="preview-card">
@@ -495,6 +501,29 @@ import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 const CURRENT_USER = authGuard();
 if (!CURRENT_USER) throw new Error("not auth");
 document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("email-builder", getCurrentSpace(), getCachedSpaces()));
+
+// Mobile preview toggle
+window.toggleMobilePreview = function() {
+  const panel = document.getElementById("ebRight");
+  const btn   = document.getElementById("mobilePreviewToggle");
+  const open  = panel.style.display !== "none";
+  panel.style.display = open ? "none" : "";
+  btn.textContent = open ? "👁 Show Preview & Templates ▾" : "👁 Hide Preview ▴";
+};
+function applyMobilePreviewLayout() {
+  const btn   = document.getElementById("mobilePreviewToggle");
+  const panel = document.getElementById("ebRight");
+  if (window.innerWidth <= 768) {
+    btn.style.display = "block";
+    panel.style.display = "none";
+    btn.textContent = "👁 Show Preview & Templates ▾";
+  } else {
+    btn.style.display = "none";
+    panel.style.display = "";
+  }
+}
+applyMobilePreviewLayout();
+window.addEventListener("resize", applyMobilePreviewLayout);
 document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("email-builder"));
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);
