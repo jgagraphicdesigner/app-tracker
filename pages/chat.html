@@ -27,7 +27,7 @@
     </div>
   </div>
 
-  <div class="chat-layout" id="chatLayout" style="height:calc(100dvh - 52px);min-height:400px">
+  <div class="chat-layout" id="chatLayout" style="height:calc(100dvh - 54px)">
     <div class="chat-sidebar">
       <div class="chat-sidebar-header">
         <span>Messages</span>
@@ -41,6 +41,10 @@
       <!-- Header -->
       <div class="chat-header">
         <div class="chat-header-left">
+          <button class="chat-back-btn" onclick="showRoomList()" aria-label="Back to chats">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M12 4L6 10l6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Chats
+          </button>
           <div id="chatRoomIcon" style="width:34px;height:34px;border-radius:8px;background:var(--purple-dim);display:none;align-items:center;justify-content:center;font-size:16px;flex-shrink:0"></div>
           <div>
             <div class="chat-header-name" id="chatRoomName">Select a chat</div>
@@ -106,14 +110,7 @@
 </div>
 
 <style>
-/* chat-layout and chat-main defined in main.css — no overrides needed here */
 #emojiPanel { position: absolute; bottom: 100%; left: 0; }
-@media (max-width: 768px) {
-  .chat-layout { flex-direction: column; height: auto !important; }
-  .chat-sidebar { width: 100% !important; border-right: none !important; border-bottom: 1px solid var(--border); max-height: 180px; overflow-y: auto; }
-  .chat-main { height: 60vh; }
-  #emojiPanel { left: 0; right: 0; width: auto !important; }
-}
 </style>
 
 <script type="module" src="../js/chat.js"></script>

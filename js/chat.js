@@ -286,6 +286,22 @@ window.deleteCurrentGroup = function() {
 };
 
 // ── Select room ───────────────────────────────────────────────
+// ── Mobile panel navigation ──────────────────────────────────
+function showChatPanel() {
+  const sidebar  = document.querySelector('.chat-sidebar');
+  const chatMain = document.getElementById('chatMain');
+  if (window.innerWidth <= 768) {
+    sidebar?.classList.add('chat-panel-hidden');
+    chatMain?.classList.add('chat-panel-active');
+  }
+}
+function showRoomList() {
+  const sidebar  = document.querySelector('.chat-sidebar');
+  const chatMain = document.getElementById('chatMain');
+  sidebar?.classList.remove('chat-panel-hidden');
+  chatMain?.classList.remove('chat-panel-active');
+}
+window.showRoomList = showRoomList;
 window.selectRoom = async function(roomId, roomName, roomType) {
   currentRoom     = roomId;
   currentRoomName = roomName;
@@ -374,6 +390,7 @@ window.selectRoom = async function(roomId, roomName, roomType) {
   unsub = subscribeMessages(roomId, msgs => renderMessages(msgs));
   closeMentionPopup();
   closeEmoji();
+  showChatPanel(); // mobile: slide to chat view
 };
 
 // ── Messages rendering with actions ──────────────────────────
