@@ -42,29 +42,66 @@ export const BASE_SPACES = {
   }
 };
 
+// ── Persistent cache keys ────────────────────────────────────────────────
+const CACHE_KEY_SPACES = 'app_spaces_cache';
+const CACHE_KEY_USERS  = 'app_users_cache';
+
+// Write spaces to localStorage so next page load is instant
+export function cacheSpaces(spacesObj) {
+  try { localStorage.setItem(CACHE_KEY_SPACES, JSON.stringify(spacesObj)); } catch(e) {}
+}
+// Write merged users to localStorage
+export function cacheUsers(usersObj) {
+  try { localStorage.setItem(CACHE_KEY_USERS, JSON.stringify(usersObj)); } catch(e) {}
+}
+// Read cached spaces synchronously (returns BASE_SPACES if nothing cached)
+export function getCachedSpaces() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_SPACES);
+    if (raw) return { ...BASE_SPACES, ...JSON.parse(raw) };
+  } catch(e) {}
+  return { ...BASE_SPACES };
+}
+// Read cached users synchronously (returns DEFAULT_USERS if nothing cached)
+export function getCachedUsers() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY_USERS);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
 // Merged SPACES — base + any overrides from Firebase config
-export let SPACES = { ...BASE_SPACES };
+// Pre-populated from localStorage cache so first render is instant
+export let SPACES = getCachedSpaces();
 
 // Live space registry (base + custom, with config overrides)
 export let ALL_SPACES = { ...BASE_SPACES };
 
-export function mergeSpaceConfig(configs) {
-  const merged = JSON.parse(JSON.stringify(BASE_SPACES));
+export function mergeSpaceConfig(configs, existingSpaces) {
+  // Start from existing spaces (preserves custom spaces) or BASE_SPACES
+  const base   = existingSpaces || SPACES || BASE_SPACES;
+  const merged = JSON.parse(JSON.stringify(base));
+
+  // Ensure all BASE_SPACES are always present
+  Object.entries(BASE_SPACES).forEach(([sid, sp]) => {
+    if (!merged[sid]) merged[sid] = JSON.parse(JSON.stringify(sp));
+  });
+
+  // Apply config overrides to any space (base or custom)
   Object.entries(configs).forEach(([spaceId, cfg]) => {
-    if (!merged[spaceId]) return;
+    if (!merged[spaceId]) return; // config for unknown space — ignore
     if (cfg.label) merged[spaceId].label = cfg.label;
     if (cfg.color) merged[spaceId].color = cfg.color;
-    // Full replacement: space-settings saves the complete stages array,
-    // so replace wholesale so renamed/added/removed steps and owners all apply.
+    // Full stages replacement — avoids ghost keys from partial updates
     if (cfg.stages && cfg.stages.length) {
       merged[spaceId].stages = cfg.stages.map((sc, i) => ({
-        id: i + 1,
-        key: `s${i + 1}`,
-        name:        sc.name  || `Step ${i + 1}`,
-        owner:       sc.owner || "jc",
+        id:          i + 1,
+        key:         `s${i + 1}`,
+        name:        sc.name        || `Step ${i + 1}`,
+        owner:       sc.owner       || "jc",
         owners:      sc.owners      || [sc.owner || "jc"],
         ownersLabel: sc.ownersLabel || [sc.ownerLabel || sc.owner || "JC"],
-        // ownerLabel = all names joined so board shows every responsible person
         ownerLabel:  sc.ownersLabel && sc.ownersLabel.length
           ? sc.ownersLabel.join(", ")
           : (sc.ownerLabel || sc.owner || "JC")
@@ -140,6 +177,29 @@ export function authGuard(root=false) {
   const user = sessionStorage.getItem("app_user");
   if (!user) { window.location.href = root ? "index.html" : "../index.html"; return null; }
   return user;
+}
+
+// Admin check — JC is default admin, others can be granted admin via Firebase profile
+// Returns true synchronously based on cached session, or checks Firebase profile async
+export function isAdminUser(uid) {
+  if (!uid) return false;
+  if (uid === "jc") return true; // JC is always admin
+  // Check sessionStorage cache for speed
+  const cached = sessionStorage.getItem("app_admin_" + uid);
+  if (cached !== null) return cached === "1";
+  return false;
+}
+
+// Load admin status from Firebase profile and cache it
+export async function loadAdminStatus(uid) {
+  if (uid === "jc") { sessionStorage.setItem("app_admin_jc", "1"); return true; }
+  try {
+    const { getUserProfile } = await import("./firebase.js");
+    const profile = await getUserProfile(uid);
+    const isAdmin = !!(profile.isAdmin);
+    sessionStorage.setItem("app_admin_" + uid, isAdmin ? "1" : "0");
+    return isAdmin;
+  } catch(e) { return false; }
 }
 
 export function getCurrentSpace() {

@@ -1,17 +1,21 @@
-// APP Tracker v33 — Firebase Storage (no more base64)
+// APP Tracker v35 — base64 for task files (no Storage auth needed)
 import {
   createProject, updateProject, deleteProject, subscribeProjects,
   getSpaceTypes, saveSpaceTypes, pushNotification,
   subscribeNotifications, markNotifRead, clearNotifications,
-  subscribeSpaceConfigs, subscribeCustomSpaces, setPresence, subscribePresence
+  subscribeSpaceConfigs, subscribeCustomSpaces, setPresence, subscribePresence, getAllUsers,
+  getSpaceConfig,
+  db, ref, set as fbSet, update as fbUpdate, remove as fbRemove
 } from "./firebase.js";
 import { notifyUser } from "./notify.js";
-import { uploadProjectFile, uploadChecklistFile, deleteStorageFile } from "./storage.js";
+import { uploadChecklistFile, deleteStorageFile } from "./storage.js";
 import {
   SPACES, BASE_SPACES, DEFAULT_USERS, STATUS_LIST, statusClass, priorityClass, PRIORITY_LEVELS,
   formatDate, timeAgo, authGuard, getCurrentSpace, setCurrentSpace,
   setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme,
-  mergeSpaceConfig, mergeCustomSpaces
+  mergeSpaceConfig, mergeCustomSpaces,
+  isAdminUser, loadAdminStatus,
+  cacheSpaces, cacheUsers, getCachedUsers
 } from "./helpers.js";
 import { renderSidebar, renderBottomNav } from "./sidebar.js";
 
@@ -19,7 +23,11 @@ const CURRENT_USER = authGuard();
 if (!CURRENT_USER) throw new Error("not auth");
 const u_obj = DEFAULT_USERS[CURRENT_USER] || { name: CURRENT_USER, av: "?", cls: "av-jc" };
 
-document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("dashboard", getCurrentSpace()));
+// ALL_USERS — merged DEFAULT_USERS + Firebase users, used for @mentions
+// Pre-populated from localStorage so @mentions work instantly on load
+let ALL_USERS = { ...DEFAULT_USERS, ...(getCachedUsers() || {}) };
+
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("dashboard", getCurrentSpace(), SPACES));
 document.querySelector(".main")?.insertAdjacentHTML("beforeend", renderBottomNav("dashboard"));
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);
@@ -107,20 +115,20 @@ window.updateLinkIcon = function(idx) {
   renderLinkEditor();
 };
 
-let projectsBySpace = { email:[], pdf:[], prints:[] };
+const projectsBySpace = { email:[], pdf:[], prints:[] }; // custom spaces added dynamically
 let notifications   = [];
 let editingId       = null;
 let activeFilter    = "all";
 let completedOpen   = false;
 let dragSrcId       = null;
 let spaceTypes      = [];
-let pendingFile     = null;
-let fileRemoved     = false;
+let pendingFiles    = [];   // array of { file, name, type, size }
+let removedFilePaths = []; // Storage paths to delete on save
 let chartInstance   = null;
 let chartMode       = "stage";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function allProjects() { return [...projectsBySpace.email, ...projectsBySpace.pdf, ...projectsBySpace.prints]; }
+function allProjects() { return Object.values(projectsBySpace).flat(); }
 function currentProjects() {
   const s = getCurrentSpace();
   return s === "all" ? allProjects() : projectsBySpace[s] || [];
@@ -145,7 +153,7 @@ window.handleNotesMention = function(e) {
   if (atIdx !== -1 && (atIdx === 0 || /\s/.test(before[atIdx-1]))) {
     const query  = before.slice(atIdx + 1).toLowerCase();
     _notesMentionStart = atIdx;
-    const matches = Object.entries(DEFAULT_USERS).filter(([uid, u]) => {
+    const matches = Object.entries(ALL_USERS).filter(([uid, u]) => {
       const name = (u.name || uid).toLowerCase();
       return query === "" || name.includes(query) || uid.includes(query);
     });
@@ -153,8 +161,8 @@ window.handleNotesMention = function(e) {
     _notesMentionIdx = 0;
     popup.innerHTML = matches.map(([uid, u], i) => `
       <div class="mention-item ${i===0?"active":""}" data-uid="${uid}" onclick="insertNotesMention('${uid}')">
-        <div class="av av-sm ${u.cls||'av-jc'}">${u.av}</div>
-        <div><div class="mention-name">${u.name}</div><div class="mention-role">${u.role}</div></div>
+        <div class="av av-sm ${u.cls||'av-jc'}">${u.av||uid.slice(0,2).toUpperCase()}</div>
+        <div><div class="mention-name">${u.name||uid}</div><div class="mention-role">${u.role||'Team member'}</div></div>
       </div>`).join("");
     popup.style.display = "block";
   } else {
@@ -176,7 +184,7 @@ window.insertNotesMention = function(uid) {
   const ta   = document.getElementById("f-notes"); if (!ta) return;
   const val  = ta.value;
   const pos  = ta.selectionStart;
-  const u    = DEFAULT_USERS[uid] || { name: uid };
+  const u    = ALL_USERS[uid] || { name: uid };
   const before = val.slice(0, _notesMentionStart);
   const after  = val.slice(pos);
   ta.value   = before + "@" + uid + " " + after;
@@ -199,7 +207,7 @@ window.switchSpace = async function(spaceId) {
   // Re-render sidebar with new active space
   document.getElementById("sidebar").outerHTML;
   const sidebar = document.getElementById("sidebar");
-  sidebar.outerHTML = renderSidebar("dashboard", spaceId);
+  sidebar.outerHTML = renderSidebar("dashboard", spaceId, SPACES);
   // Re-attach sidebar close overlay
   document.getElementById("sidebarOverlay").onclick = closeSidebar;
   setupSidebar(CURRENT_USER);
@@ -211,6 +219,17 @@ window.switchSpace = async function(spaceId) {
   buildFilterButtons();
   renderAll();
 };
+
+// Re-render just the sidebar without a full page reload
+function fvRefreshSidebar() {
+  const sidebarEl = document.getElementById("sidebar");
+  if (!sidebarEl) return;
+  const currentSpace = getCurrentSpace();
+  const newHtml = renderSidebar("dashboard", currentSpace, SPACES);
+  sidebarEl.outerHTML = newHtml;
+  document.getElementById("sidebarOverlay").onclick = closeSidebar;
+  setupSidebar(CURRENT_USER);
+}
 
 function updateSpaceBanner() {
   const s    = getCurrentSpace();
@@ -392,24 +411,27 @@ function renderAllSpacesDashboard() {
   if (board) {
     board.className = "space-overview-grid";
     board.style.minWidth = "unset";
-    const spaces = ["email","pdf","prints"];
+    // Include all spaces (base + custom)
+    const spaces = Object.keys(SPACES).filter(sid => SPACES[sid]?.stages);
     board.innerHTML = spaces.map(sid => {
       const sp      = SPACES[sid];
+      if (!sp) return "";
       const sproj   = projectsBySpace[sid] || [];
       const sactive = sproj.filter(p => p.status !== "Published");
       const smine   = sactive.filter(p => sp.stages.find(st => st.id===Number(p.stage))?.owner===CURRENT_USER).length;
       const spub    = sproj.filter(p => p.status==="Published").length;
       const sod     = sactive.filter(p => p.due && new Date(p.due+"T00:00:00") < today).length;
+      const spColor = sp.color || SPACE_COLORS[sid] || '#7c5cbf';
       return `
         <div class="space-overview-card" onclick="switchSpace('${sid}')">
           <div class="space-overview-header">
-            <div class="space-overview-dot" style="background:${SPACE_COLORS[sid]}"></div>
+            <div class="space-overview-dot" style="background:${spColor}"></div>
             <div class="space-overview-name">${sp.label} Space</div>
             <div style="margin-left:auto;font-size:11px;color:var(--text-3)">${sactive.length} active</div>
           </div>
           <div class="space-overview-stats">
             <div class="space-ov-stat">
-              <div class="space-ov-val" style="color:${SPACE_COLORS[sid]}">${sactive.length}</div>
+              <div class="space-ov-val" style="color:${spColor}">${sactive.length}</div>
               <div class="space-ov-label">Active</div>
             </div>
             <div class="space-ov-stat">
@@ -427,7 +449,7 @@ function renderAllSpacesDashboard() {
               return `<span>${st.name.split(" ")[0]}: <strong style="color:var(--text-1)">${cnt}</strong></span>`;
             }).join("")}
           </div>
-          <div style="margin-top:10px;text-align:right;font-size:12px;color:${SPACE_COLORS[sid]};font-weight:500">Open space →</div>
+          <div style="margin-top:10px;text-align:right;font-size:12px;color:${spColor};font-weight:500">Open space →</div>
         </div>`;
     }).join("");
   }
@@ -460,7 +482,7 @@ function renderBoard() {
     col.className = `stage-col ${stage.key}`;
     col.innerHTML = `
       <div class="stage-head">
-        <div class="stage-head-inner">
+        <div>
           <div class="stage-step">Step ${stage.id}</div>
           <div class="stage-name">${stage.name}</div>
           <div class="stage-owner">${
@@ -505,7 +527,38 @@ function buildCard(p, area, stage, today) {
   const priorityBadge = p.priority ? `<span class="badge badge-priority-${p.priority.toLowerCase()}">${p.priority==="High"?"🔴":p.priority==="Medium"?"🟡":"🟢"} ${p.priority}</span>` : "";
   const spaceTag = getCurrentSpace() === "all" ? `<span class="badge badge-custom" style="font-size:9px">${p.space||"email"}</span>` : "";
   const cardLinks = normaliseLinkData(p);
-  const fileLink  = p.fileName ? `<button class="tc-link" style="background:none;border:none;cursor:pointer" onclick="event.stopPropagation();viewFile('${p.id}')">📄 ${p.fileName}</button>` : "";
+
+  // Multi-file display on card — always show LATEST version thumbnail
+  const projFiles = getProjectFiles(p);
+  let fileSection = "";
+  if (projFiles.length === 1) {
+    const f    = projFiles[0];
+    const src  = getSlotDisplaySrc(f);
+    const type = getSlotDisplayType(f) || f.fileType;
+    const vCount = f.versions ? (Array.isArray(f.versions) ? f.versions.length : Object.keys(f.versions).length) : 1;
+    const vBadge = vCount > 1 ? `<span style="font-size:9px;background:var(--purple-dim);color:var(--purple);padding:1px 4px;border-radius:4px;flex-shrink:0">v${vCount}</span>` : "";
+    if (type?.includes("image") && src) {
+      fileSection = `<div class="tc-links" style="display:flex;align-items:center;gap:5px">
+        <img src="${src}" onclick="event.stopPropagation();viewFile('${p.id}',0)" style="width:36px;height:36px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border)" title="${f.fileName}"/>
+        ${vBadge}
+      </div>`;
+    } else {
+      const icon = type?.includes("pdf") ? "📄" : "📝";
+      fileSection = `<div class="tc-links" style="display:flex;align-items:center;gap:5px"><button class="tc-link" style="background:none;border:none;cursor:pointer" onclick="event.stopPropagation();viewFile('${p.id}',0)">${icon} ${f.fileName}</button>${vBadge}</div>`;
+    }
+  } else if (projFiles.length > 1) {
+    const thumbs = projFiles.slice(0,3).map((f, i) => {
+      const src  = getSlotDisplaySrc(f);
+      const type = getSlotDisplayType(f) || f.fileType;
+      if (type?.includes("image") && src) {
+        return `<img src="${src}" onclick="event.stopPropagation();viewFile('${p.id}',${i})" style="width:36px;height:36px;object-fit:cover;border-radius:4px;cursor:pointer;border:1px solid var(--border)" title="${f.fileName}"/>`;
+      }
+      const icon = type?.includes("pdf") ? "📄" : "📝";
+      return `<span onclick="event.stopPropagation();viewFile('${p.id}',${i})" style="font-size:20px;cursor:pointer;line-height:1" title="${f.fileName}">${icon}</span>`;
+    }).join("");
+    const extra = projFiles.length > 3 ? `<span style="font-size:10px;color:var(--text-3);align-self:center">+${projFiles.length-3}</span>` : "";
+    fileSection = `<div class="tc-links" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">${thumbs}${extra}</div>`;
+  }
 
   const card = document.createElement("div");
   card.className = `task-card${isMine?" mine":""}`;
@@ -519,7 +572,7 @@ function buildCard(p, area, stage, today) {
       ${spaceTag}${dueBadge}
     </div>
     ${p.due ? `<div class="tc-due">Due ${formatDate(p.due)}</div>` : ""}
-    ${fileLink ? `<div class="tc-links">${fileLink}</div>` : ""}
+    ${fileSection}
     ${cardLinks.length ? renderLinkPills(cardLinks) : ""}
     ${checkBar}`;
   card.addEventListener("click",     () => openDetail(p));
@@ -695,44 +748,1534 @@ window.goToTask = function(projectId, space) {
   window.location.href = "dashboard.html";
 };
 
-// ── File handling ──────────────────────────────────────────────────────────
+// ── File handling (multi-file) ─────────────────────────────────────────────
 window.handleFileSelect = function(event) {
-  const file = event.target.files[0]; if (!file) return;
-  if (file.size > 50*1024*1024) { alert("File too large — max 50MB"); return; }
-  // Store the raw File object — upload to Firebase Storage on save (no base64)
-  pendingFile = { file, name:file.name, type:file.type, size:file.size };
-  document.getElementById("attachedFilePreview").innerHTML = `
-    <div class="attached-file">
-      <div class="file-icon">${fileIcon(file.type)}</div>
-      <div class="file-name">${file.name}</div>
-      <div class="file-size">${(file.size/1024/1024).toFixed(1)}MB</div>
-      <button class="file-remove-btn" onclick="removePendingFile()">✕ Remove</button>
-    </div>`;
+  const files = Array.from(event.target.files);
+  if (!files.length) return;
+  const MAX = 5;
+  for (const file of files) {
+    if (pendingFiles.length >= MAX) { alert(`Max ${MAX} files per task.`); break; }
+    if (file.size > 10*1024*1024) { alert(`"${file.name}" is too large — max 10MB per file.`); continue; }
+    if (pendingFiles.find(f => f.name === file.name && f.size === file.size)) continue; // skip dupe
+    pendingFiles.push({ file, name:file.name, type:file.type, size:file.size });
+  }
+  document.getElementById("fileInput").value = "";
+  renderFilePreview();
 };
-window.removePendingFile = () => { pendingFile=null; fileRemoved=true; document.getElementById("attachedFilePreview").innerHTML=""; document.getElementById("fileInput").value=""; };
+
+function renderFilePreview() {
+  const el = document.getElementById("attachedFilePreview"); if (!el) return;
+  // Combine saved files (from existing project) + new pending files
+  const savedFiles = _editingSavedFiles || [];
+  const totalCount = savedFiles.length + pendingFiles.length;
+  if (!totalCount) { el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <div class="attached-files-list">
+      ${savedFiles.map((f, i) => `
+        <div class="attached-file">
+          <div class="file-icon">${fileIcon(f.fileType)}</div>
+          <div class="file-name">${f.fileName}</div>
+          <button class="file-remove-btn" onclick="removeSavedFile(${i})" title="Remove">✕</button>
+        </div>`).join("")}
+      ${pendingFiles.map((f, i) => `
+        <div class="attached-file pending">
+          <div class="file-icon">${fileIcon(f.type)}</div>
+          <div class="file-name">${f.name}</div>
+          <div class="file-size">${(f.size/1024/1024).toFixed(1)}MB</div>
+          <button class="file-remove-btn" onclick="removePendingFile(${i})" title="Remove">✕</button>
+        </div>`).join("")}
+    </div>`;
+}
+
+// Tracks saved files on the project being edited (so we can remove individual ones)
+let _editingSavedFiles = [];
+
+window.removePendingFile = function(idx) {
+  pendingFiles.splice(idx, 1);
+  renderFilePreview();
+};
+
+window.removeSavedFile = function(idx) {
+  const f = _editingSavedFiles[idx];
+  if (f?.filePath) removedFilePaths.push(f.filePath);
+  _editingSavedFiles.splice(idx, 1);
+  renderFilePreview();
+};
 function fileIcon(type) { if (!type) return "📄"; if (type.includes("pdf")) return "📄"; if (type.includes("image")) return "🖼"; return "📝"; }
 
-window.viewFile = function(projectId) {
+// ── File Review Panel ─────────────────────────────────────────────────────
+// State for the open review panel
+let _fvProjectId  = null;  // project id
+let _fvFileIdx    = 0;     // which file slot (multiple files per project)
+let _fvVersionIdx = null;  // which version in view (null = latest)
+let _fvEditingId  = null;  // comment/reply id currently being edited
+let _fvReplyingTo = null;  // comment id currently being replied to
+
+window.closeFileViewer = function(e) {
+  if (e.target.id === "fileViewerModal") document.getElementById("fileViewerModal").classList.remove("open");
+};
+
+// Main entry point — open the review panel
+window.viewFile = function(projectId, fileIdx) {
+  _fvProjectId   = projectId;
+  _fvFileIdx     = fileIdx ?? 0;
+  _fvVersionIdx  = null; // always open on latest
+  _fvEditingId    = null;
+  _fvReplyingTo   = null;
+  _annModeActive  = false;
+  _annDrawing     = false;
+  _annPending     = null;
+  _fvRedrawingCid = null;
+  _penPtsRaw      = [];
+  _fvZoom         = 1.0;
+  _fvPanMode      = false;
+  // Clear version cache so we always load fresh data from Firebase on open
+  Object.keys(_fvVersionCache).forEach(k => delete _fvVersionCache[k]);
+  // Pre-populate local cache from Firebase subscription data
   const p = allProjects().find(x => x.id === projectId);
-  const src = p?.fileUrl || p?.fileData; // support legacy base64 too
-  if (!src) return;
-  document.getElementById("fileViewerTitle").textContent = p.fileName||"File";
-  const body = document.getElementById("fileViewerBody");
-  if (p.fileType?.includes("image")) {
-    body.innerHTML = `<img src="${src}" style="max-width:100%;border-radius:8px"/>`;
-  } else if (p.fileType?.includes("pdf")) {
-    body.innerHTML = `<iframe src="${src}" style="width:100%;height:500px;border:none;border-radius:8px"></iframe>`;
-  } else {
-    body.innerHTML = `<div style="text-align:center;padding:2rem">
-      <div style="font-size:48px">${fileIcon(p.fileType)}</div>
-      <div style="margin-top:12px;font-size:14px;color:var(--text-2)">${p.fileName}</div>
-      <a href="${src}" target="_blank" rel="noopener" download="${p.fileName}" class="btn-primary"
-         style="display:inline-block;margin-top:14px;text-decoration:none;padding:8px 16px;background:var(--purple);color:white;border-radius:var(--radius-sm)">
-        Download
-      </a></div>`;
-  }
+  if (p?.fileReviews) fvSyncFromFirebase(p);
+  // Restore full panel (may have been hidden by viewCheckFile)
+  const cp = document.getElementById("fvCommentsPanel");
+  const ac = document.getElementById("fvActions");
+  if (cp) cp.style.display = "";
+  if (ac) ac.innerHTML = `
+    <button class="btn-ghost" style="font-size:12px" onclick="fvDownloadCurrent()">⬇ Download</button>
+    <button id="fvAnnotateBtn" class="btn-ghost" style="font-size:12px" onclick="fvToggleAnnotate()" title="Click image to drop annotation pins">✏ Annotate</button>
+    <label class="btn-ghost" style="font-size:12px;cursor:pointer">
+      ↑ Upload new version
+      <input type="file" id="fvUploadInput" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="fvUploadNewVersion(event)"/>
+    </label>`;
+  fvRender();
   document.getElementById("fileViewerModal").classList.add("open");
 };
+
+// Migrate old flat file format to versioned format on-the-fly
+function fvGetSlot(p, idx) {
+  const files = getProjectFiles(p);
+  const slot  = files[idx];
+  if (!slot) return null;
+
+  if (slot.versions) {
+    // Firebase RTDB stores arrays as objects with numeric string keys
+    // Normalise to a proper JS array sorted by index
+    const versions = Array.isArray(slot.versions)
+      ? slot.versions
+      : Object.keys(slot.versions)
+          .sort((a,b) => Number(a)-Number(b))
+          .map(k => slot.versions[k]);
+    return { ...slot, versions };
+  }
+
+  // No versions yet — wrap flat file into v0
+  return {
+    ...slot,
+    versions: [{
+      fileName:   slot.fileName,
+      fileType:   slot.fileType,
+      fileData:   slot.fileData,
+      fileUrl:    slot.fileUrl,
+      filePath:   slot.filePath,
+      uploadedBy: slot.uploadedBy || "jc",
+      uploadedAt: slot.uploadedAt || Date.now(),
+    }]
+  };
+}
+
+function fvCurrentVersion(slot) {
+  const versions = slot.versions || [];
+  if (_fvVersionIdx !== null && versions[_fvVersionIdx]) return versions[_fvVersionIdx];
+  return versions[versions.length - 1]; // latest = last
+}
+
+// ── Review data model ─────────────────────────────────────────────────────
+// Comments & annotations stored at project.fileReviews[key] 
+// where key = `${fileIdx}_${versionIdx}`
+// This keeps heavy base64 fileData COMPLETELY SEPARATE from comment writes.
+
+// ── State ─────────────────────────────────────────────────────────────────
+
+// Annotation drawing state
+let _annTool       = 'rect';   // 'rect' | 'circle' | 'pen'
+let _annDrawing    = false;
+let _annStart      = null;     // {x,y} in % coords
+let _annSvg        = null;     // live SVG element while drawing
+let _annPending    = null;     // shape data awaiting text input
+let _annTextInput  = null;     // popup element
+let _fvRedrawingCid = null;    // cid of annotation being redrawn
+let _penPtsRaw     = [];       // raw [x,y] pairs collected during pen draw
+let _fvZoom        = 1.0;      // current zoom level (1.0 = fit to width)
+let _fvPanMode     = false;    // true when hand/pan tool is active
+
+// ── Local version cache ────────────────────────────────────────────────────
+// Keyed by "projectId/fileIdx" → array of version objects
+// Written immediately on upload/delete so fvRender shows changes without
+// waiting for Firebase subscribeProjects to fire back.
+const _fvVersionCache = {};
+
+function _vcKey()         { return `${_fvProjectId}/${_fvFileIdx}`; }
+function _vcGet()         { return _fvVersionCache[_vcKey()] || null; }
+function _vcSet(versions) { _fvVersionCache[_vcKey()] = versions; }
+function _vcClear()       { delete _fvVersionCache[_vcKey()]; }
+
+// Get the authoritative versions array — local cache first, then Firebase
+function fvGetVersions(slot) {
+  const cached = _vcGet();
+  if (cached) return cached;
+  return slot?.versions || [];
+}
+
+function fvCid() { return Math.random().toString(36).slice(2,9); }
+
+// ── Local optimistic review cache ─────────────────────────────────────────
+// Keyed by "projectId/fileIdx_vidx" — updated immediately on write,
+// so comments appear instantly without waiting for Firebase onValue roundtrip
+const _fvLocalCache = {};
+
+function fvCacheKey() {
+  if (!_fvProjectId) return null;
+  const key = fvReviewKey();
+  return key ? `${_fvProjectId}/${key}` : null;
+}
+
+function fvCacheGet() {
+  const k = fvCacheKey(); if (!k) return null;
+  return _fvLocalCache[k] || null;
+}
+
+function fvCacheSet(reviews) {
+  const k = fvCacheKey(); if (!k) return;
+  _fvLocalCache[k] = reviews;
+}
+
+function fvCacheAdd(comment) {
+  const k = fvCacheKey(); if (!k) return;
+  if (!_fvLocalCache[k]) _fvLocalCache[k] = {};
+  _fvLocalCache[k][comment.id] = comment;
+}
+
+function fvCacheUpdate(cid, updates) {
+  const k = fvCacheKey(); if (!k) return;
+  // Ensure cache bucket exists
+  if (!_fvLocalCache[k]) _fvLocalCache[k] = {};
+  // If item not in local cache, pull from Firebase subscription data first
+  if (!_fvLocalCache[k][cid]) {
+    const p = allProjects().find(x => x.id === _fvProjectId);
+    const key = fvReviewKey();
+    const fbItem = key ? p?.fileReviews?.[key]?.[cid] : null;
+    if (fbItem) _fvLocalCache[k][cid] = fbItem;
+    else return; // truly doesn't exist anywhere
+  }
+  _fvLocalCache[k][cid] = { ..._fvLocalCache[k][cid], ...updates };
+}
+
+// Sync Firebase data into local cache (called by subscribeProjects)
+// Only updates keys we don't have locally yet (or if another user wrote)
+function fvSyncFromFirebase(p) {
+  if (!p.fileReviews) return;
+  Object.entries(p.fileReviews).forEach(([key, reviews]) => {
+    const ck = `${p.id}/${key}`;
+    if (!_fvLocalCache[ck]) {
+      _fvLocalCache[ck] = reviews;
+    } else {
+      // Merge: add any new entries from Firebase that aren't in local cache
+      Object.entries(reviews).forEach(([cid, c]) => {
+        if (!_fvLocalCache[ck][cid]) _fvLocalCache[ck][cid] = c;
+      });
+    }
+  });
+}
+
+// ── Review key ────────────────────────────────────────────────────────────
+function fvReviewKey() {
+  const p = allProjects().find(x => x.id === _fvProjectId); if (!p) return null;
+  const slot = fvGetSlot(p, _fvFileIdx); if (!slot) return null;
+  const vidx = _fvVersionIdx !== null ? _fvVersionIdx : (slot.versions||[]).length - 1;
+  return `${_fvFileIdx}_${vidx}`;
+}
+
+function fvGetReviews() {
+  // Always merge latest Firebase data into local cache first
+  // This ensures delete/like/edit work even when cache is cold
+  const p = allProjects().find(x => x.id === _fvProjectId);
+  if (p?.fileReviews) fvSyncFromFirebase(p);
+
+  const cached = fvCacheGet();
+  if (cached) {
+    return Object.values(cached).filter(c => !c.deleted).sort((a,b) => a.at - b.at);
+  }
+  return [];
+}
+
+async function fvSaveReview(commentData) {
+  const p   = allProjects().find(x => x.id === _fvProjectId); if (!p) return;
+  const key = fvReviewKey(); if (!key) return;
+  const sp  = p.space || getCurrentSpace() || 'email';
+  // Update local cache immediately for instant UI feedback
+  fvCacheAdd(commentData);
+  // Write to Firebase (async - UI already updated)
+  await fbSet(ref(db, `spaces/${sp}/projects/${p.id}/fileReviews/${key}/${commentData.id}`), commentData);
+}
+
+async function fvUpdateReview(cid, updates) {
+  const p   = allProjects().find(x => x.id === _fvProjectId); if (!p) return;
+  const key = fvReviewKey(); if (!key) return;
+  const sp  = p.space || getCurrentSpace() || 'email';
+  // Update local cache immediately
+  fvCacheUpdate(cid, updates);
+  await fbUpdate(ref(db, `spaces/${sp}/projects/${p.id}/fileReviews/${key}/${cid}`), updates);
+}
+
+async function fvRemoveReview(cid) {
+  const p   = allProjects().find(x => x.id === _fvProjectId); if (!p) return;
+  const key = fvReviewKey(); if (!key) return;
+  const sp  = p.space || getCurrentSpace() || 'email';
+  fvCacheUpdate(cid, { deleted: true });
+  await fbUpdate(ref(db, `spaces/${sp}/projects/${p.id}/fileReviews/${key}/${cid}`), { deleted: true });
+}
+
+// ── @mention helpers ───────────────────────────────────────────────────────
+window.fvHandleMention = function(e) {
+  const ta     = e.target;
+  const before = ta.value.slice(0, ta.selectionStart);
+  const atIdx  = before.lastIndexOf('@');
+  const popup  = ta.parentNode?.querySelector('.fv-mention-popup');
+  if (!popup) return;
+  if (atIdx !== -1 && (atIdx === 0 || /\s/.test(before[atIdx-1]))) {
+    const query = before.slice(atIdx+1).toLowerCase();
+    const matches = Object.entries(ALL_USERS).filter(([uid,u]) =>
+      query==='' || (u.name||uid).toLowerCase().includes(query) || uid.includes(query));
+    if (!matches.length) { popup.style.display='none'; return; }
+    popup.innerHTML = matches.map(([uid,u],i) =>
+      `<div class="mention-item ${i===0?'active':''}" data-uid="${uid}" onmousedown="event.preventDefault();fvInsertMention(event,'${uid}')">
+        <div class="av av-sm ${u.cls||'av-jc'}" style="width:20px;height:20px;font-size:8px;font-weight:700">${u.av||uid.slice(0,2).toUpperCase()}</div>
+        <div><div class="mention-name">${u.name||uid}</div><div class="mention-role">${u.role||'Team member'}</div></div>
+      </div>`).join('');
+    popup.style.display = 'block';
+  } else {
+    popup.style.display = 'none';
+  }
+};
+
+window.fvInsertMention = function(e, uid) {
+  const popup = e.target.closest('.fv-mention-popup');
+  const ta    = popup?.parentNode?.querySelector('textarea');
+  if (!ta) return;
+  const val = ta.value, pos = ta.selectionStart;
+  const before = val.slice(0,pos), atIdx = before.lastIndexOf('@');
+  ta.value = before.slice(0,atIdx) + '@' + uid + ' ' + val.slice(pos);
+  const np = atIdx + uid.length + 2;
+  ta.setSelectionRange(np,np); ta.focus();
+  popup.style.display = 'none';
+};
+
+window.fvMentionKey = function(e) {
+  const popup = e.target.parentNode?.querySelector('.fv-mention-popup');
+  if (!popup || popup.style.display==='none') return;
+  const items = popup.querySelectorAll('.mention-item');
+  if (e.key==='ArrowDown') { e.preventDefault(); const c=popup.querySelector('.active'); const n=c?.nextElementSibling||items[0]; items.forEach(i=>i.classList.remove('active')); n?.classList.add('active'); }
+  else if (e.key==='ArrowUp') { e.preventDefault(); const c=popup.querySelector('.active'); const n=c?.previousElementSibling||items[items.length-1]; items.forEach(i=>i.classList.remove('active')); n?.classList.add('active'); }
+  else if (e.key==='Enter') { const a=popup.querySelector('.active'); if(a){e.preventDefault();a.dispatchEvent(new MouseEvent('mousedown'));} }
+  else if (e.key==='Escape') { popup.style.display='none'; }
+};
+
+function fvFormatText(text) {
+  return (text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/@(\w+)/g, (m,uid) => ALL_USERS[uid] ? `<span class="fv-mention">@${ALL_USERS[uid].name}</span>` : m);
+}
+
+// ── Main render ────────────────────────────────────────────────────────────
+function fvRender() {
+  // If user is actively drawing, only refresh comments — never interrupt the canvas
+  if (_annDrawing) { fvRenderComments(); return; }
+  const p = allProjects().find(x => x.id === _fvProjectId); if (!p) return;
+  const allSlots = getProjectFiles(p);
+  const slot     = fvGetSlot(p, _fvFileIdx); if (!slot) return;
+  const versions = fvGetVersions(slot);  // local cache-first
+  const vidx     = (_fvVersionIdx !== null && _fvVersionIdx < versions.length)
+                   ? _fvVersionIdx : versions.length - 1;
+  const ver      = versions[vidx];
+  if (!ver) { document.getElementById('fvPreview').innerHTML = '<div style="padding:2rem;color:var(--text-3);text-align:center">No version data</div>'; return; }
+  const src      = ver.fileUrl || ver.fileData;
+  const totalVers= versions.length;
+  const isImage  = ver.fileType?.includes('image');
+
+  // Header
+  document.getElementById('fvTitle').textContent = slot.fileName || ver.fileName;
+  document.getElementById('fvMeta').textContent  =
+    `v${vidx+1} of ${totalVers} · ${DEFAULT_USERS[ver.uploadedBy]?.name||ver.uploadedBy||'Unknown'} · ${timeAgo(ver.uploadedAt)}`;
+  document.getElementById('fvDownloadAll').style.display = totalVers > 1 ? 'inline-flex' : 'none';
+
+  // File tabs
+  const tabsEl = document.getElementById('fvFileTabs');
+  if (allSlots.length > 1) {
+    tabsEl.innerHTML = allSlots.map((s,i) => {
+      const sv = fvGetSlot(p,i);
+      const sv0 = sv?.versions?.[sv.versions.length-1];
+      const thumb = sv0?.fileType?.includes('image')
+        ? `<img src="${sv0.fileUrl||sv0.fileData}" style="width:40px;height:40px;object-fit:cover;border-radius:4px;display:block"/>`
+        : `<span style="font-size:22px;display:block;text-align:center">${fileIcon(sv0?.fileType)}</span>`;
+      return `<div class="fv-tab ${i===_fvFileIdx?'active':''}" onclick="fvSwitchFile(${i})" title="${s.fileName||''}">${thumb}<div class="fv-tab-name">${(s.fileName||'').split('.')[0]}</div></div>`;
+    }).join('');
+    tabsEl.style.display = 'flex';
+  } else { tabsEl.style.display = 'none'; }
+
+  // Preview
+  const prevEl = document.getElementById('fvPreview');
+  if (isImage) {
+    fvRenderAnnotatedImage(src);
+  } else if (ver.fileType?.includes('pdf')) {
+    prevEl.innerHTML = `<iframe src="${src}" style="width:100%;height:100%;min-height:400px;border:none;border-radius:8px"></iframe>`;
+  } else {
+    prevEl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--text-2)"><span style="font-size:56px">${fileIcon(ver.fileType)}</span><div style="font-size:13px;font-weight:500">${ver.fileName}</div></div>`;
+  }
+
+  // ── Version filmstrip ──────────────────────────────────────────────────
+  const stripEl = document.getElementById('fvVersionStrip');
+  if (totalVers > 1) {
+    stripEl.style.display = '';
+    const isOnLatest = vidx === versions.length - 1;
+
+    const cards = versions.map((v, i) => {
+      const vsrc     = v.fileUrl || v.fileData;
+      const isImg    = v.fileType?.includes('image');
+      const active   = i === vidx;
+      const isLast   = i === versions.length - 1;
+      const uploader = DEFAULT_USERS[v.uploadedBy]?.name || v.uploadedBy || '?';
+      const canDel   = versions.length > 1 && (v.uploadedBy === CURRENT_USER || CURRENT_USER === 'jc');
+
+      const imgHtml = isImg && vsrc
+        ? `<img src="${vsrc}" alt="v${i+1}"/>`
+        : `<div class="fv-vcard-icon">${fileIcon(v.fileType)}</div>`;
+
+      const latestBadge  = isLast  ? `<span class="fv-badge fv-badge-latest">Latest</span>` : '';
+      const currentBadge = active  ? `<span class="fv-badge fv-badge-current">Viewing</span>` : '';
+      const delBtn = canDel
+        ? `<button class="fv-vcard-del" onclick="event.stopPropagation();fvDeleteVersion(${i})">🗑 Delete v${i+1}</button>`
+        : '';
+
+      return `
+        <div class="fv-vcard${active?' active':''}" onclick="fvSwitchVersion(${i})" title="Switch to v${i+1}">
+          <div class="fv-vcard-img">${imgHtml}</div>
+          <div class="fv-vcard-body">
+            <div class="fv-vcard-ver">v${i+1} ${latestBadge}${currentBadge}</div>
+            <div class="fv-vcard-who">${uploader}</div>
+            <div class="fv-vcard-time">${timeAgo(v.uploadedAt)}</div>
+          </div>
+          ${delBtn}
+        </div>`;
+    }).join('');
+
+    const prevBtn = `<button class="fv-arr" onclick="fvSwitchVersion(${vidx-1})" ${vidx===0?'disabled':''}>‹</button>`;
+    const nextBtn = `<button class="fv-arr" onclick="fvSwitchVersion(${vidx+1})" ${vidx===versions.length-1?'disabled':''}>›</button>`;
+    const returnBtn = !isOnLatest
+      ? `<button class="fv-return-btn" onclick="fvSwitchVersion(${versions.length-1})">↩ Latest (v${versions.length})</button>`
+      : '';
+
+    stripEl.innerHTML = `
+      <div class="fv-strip-bar">
+        <span class="fv-strip-label">Versions (${totalVers})</span>
+        ${returnBtn}
+        ${prevBtn}${nextBtn}
+      </div>
+      <div class="fv-strip-scroll">${cards}</div>`;
+
+    // Scroll active card into view without interrupting user
+    requestAnimationFrame(() => {
+      const activeCard = stripEl.querySelector('.fv-vcard.active');
+      activeCard?.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'nearest' });
+    });
+  } else {
+    stripEl.style.display = 'none';
+  }
+
+  // Actions bar — show annotation toolbar only for images
+  const acEl = document.getElementById('fvActions');
+  const zoomPct = Math.round(_fvZoom * 100);
+  const zoomControls = `
+    <div class="fv-zoom-group">
+      <button class="fv-zoom-btn" onclick="fvZoomOut()" title="Zoom out">−</button>
+      <button class="fv-zoom-pct" onclick="fvZoomFit()" title="Reset to fit width">${zoomPct}%</button>
+      <button class="fv-zoom-btn" onclick="fvZoomIn()" title="Zoom in">+</button>
+    </div>`;
+
+  if (isImage) {
+    acEl.innerHTML = `
+      <button class="btn-ghost" style="font-size:12px" onclick="fvDownloadCurrent()">⬇ Download</button>
+      <div class="ann-toolbar" id="annToolbar">
+        <button class="ann-tool-btn ${_fvPanMode?'active':''}" onclick="fvTogglePan()" title="Pan / drag to scroll">✋</button>
+        <span style="width:1px;background:var(--border);height:16px;margin:0 2px;display:inline-block"></span>
+        <button class="ann-tool-btn ${_annTool==='rect'?'active':''}" onclick="fvSetTool('rect')" title="Rectangle">⬜</button>
+        <button class="ann-tool-btn ${_annTool==='circle'?'active':''}" onclick="fvSetTool('circle')" title="Circle">⭕</button>
+        <button class="ann-tool-btn ${_annTool==='pen'?'active':''}" onclick="fvSetTool('pen')" title="Freehand">✏️</button>
+        <button id="fvAnnotateBtn" class="${_annDrawing||_annPending?'ann-tool-btn active':'ann-tool-btn'}" onclick="fvToggleAnnotate()" title="Draw annotation">Annotate</button>
+        <button class="ann-tool-btn" onclick="fvClearAllAnnotations()" title="Clear all annotations" style="color:var(--rev-fg)">🗑</button>
+      </div>
+      ${zoomControls}
+      <label class="btn-ghost" style="font-size:12px;cursor:pointer">
+        ↑ New version
+        <input type="file" id="fvUploadInput" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="fvUploadNewVersion(event)"/>
+      </label>`;
+  } else {
+    acEl.innerHTML = `
+      <button class="btn-ghost" style="font-size:12px" onclick="fvDownloadCurrent()">⬇ Download</button>
+      ${zoomControls}
+      <label class="btn-ghost" style="font-size:12px;cursor:pointer">↑ New version<input type="file" id="fvUploadInput" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.webp" style="display:none" onchange="fvUploadNewVersion(event)"/></label>`;
+  }
+
+  // Apply current zoom to image wrap
+  fvApplyZoom();
+
+  // Comments
+  fvRenderComments();
+}
+
+// ── Annotation rendering ───────────────────────────────────────────────────
+let _annModeActive = false;
+
+// ── Zoom controls ──────────────────────────────────────────────────────────
+const FV_ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0];
+const FV_ZOOM_MIN   = 0.25;
+const FV_ZOOM_MAX   = 3.0;
+
+function fvApplyZoom() {
+  const wrap = document.getElementById('fvAnnWrap');
+  const img  = document.getElementById('fvAnnImg');
+  if (!wrap || !img) return;
+
+  // Use explicit pixel width on the wrap — this correctly affects scroll height
+  // unlike CSS transform which is visual-only and doesn't expand scroll area.
+  // At 100% zoom: wrap fills preview width (minus padding).
+  // At 200% zoom: wrap is 200% of preview width → horizontal scroll appears,
+  //   and vertical height doubles → vertical scroll reflects true zoomed size.
+  const preview = document.getElementById('fvPreview');
+  if (!preview) return;
+
+  // Remove transform — we use layout width only
+  wrap.style.transform       = '';
+  wrap.style.transformOrigin = '';
+
+  if (_fvZoom === 1.0) {
+    wrap.style.width    = '';   // let CSS rule (width:100%) take over
+    img.style.width     = '';
+  } else {
+    // Explicit width as % of preview's scrollable area
+    wrap.style.width    = `${_fvZoom * 100}%`;
+    img.style.width     = '100%';  // img fills the wrap
+  }
+
+  // Update the zoom % label without full re-render
+  const btn = document.querySelector('.fv-zoom-pct');
+  if (btn) btn.textContent = `${Math.round(_fvZoom * 100)}%`;
+}
+
+window.fvZoomIn = function() {
+  const next = FV_ZOOM_STEPS.find(z => z > _fvZoom + 0.01);
+  _fvZoom = next !== undefined ? next : FV_ZOOM_MAX;
+  fvApplyZoom();
+};
+
+window.fvZoomOut = function() {
+  const prev = [...FV_ZOOM_STEPS].reverse().find(z => z < _fvZoom - 0.01);
+  _fvZoom = prev !== undefined ? prev : FV_ZOOM_MIN;
+  fvApplyZoom();
+};
+
+window.fvZoomFit = function() {
+  _fvZoom = 1.0;
+  fvApplyZoom();
+  // Scroll back to top when resetting
+  const p = document.getElementById('fvPreview');
+  if (p) p.scrollTop = 0;
+};
+
+// ── Pan mode (drag to scroll) ──────────────────────────────────────────────
+window.fvTogglePan = function() {
+  _fvPanMode = !_fvPanMode;
+  const preview = document.getElementById('fvPreview');
+  if (!preview) return;
+  preview.classList.toggle('fv-pan-mode', _fvPanMode);
+  // Disable annotation mode when entering pan mode
+  if (_fvPanMode && _annModeActive) {
+    _annModeActive = false;
+    document.getElementById('fvAnnotateBtn')?.classList.remove('active');
+    document.getElementById('fvAnnWrap')?.classList.remove('annotate-mode');
+  }
+  // Update toolbar button state
+  const panBtn = document.querySelector('.ann-tool-btn[onclick="fvTogglePan()"]');
+  if (panBtn) panBtn.classList.toggle('active', _fvPanMode);
+};
+
+// Pan drag state
+let _panDragging = false;
+let _panStartX   = 0;
+let _panStartY   = 0;
+let _panScrollX  = 0;
+let _panScrollY  = 0;
+
+document.addEventListener('mousedown', e => {
+  const preview = document.getElementById('fvPreview');
+  if (!_fvPanMode || !preview?.contains(e.target)) return;
+  e.preventDefault();
+  _panDragging = true;
+  _panStartX   = e.clientX;
+  _panStartY   = e.clientY;
+  _panScrollX  = preview.scrollLeft;
+  _panScrollY  = preview.scrollTop;
+  preview.classList.add('fv-panning');
+});
+
+document.addEventListener('mousemove', e => {
+  if (!_panDragging) return;
+  const preview = document.getElementById('fvPreview');
+  if (!preview) return;
+  e.preventDefault();
+  preview.scrollLeft = _panScrollX - (e.clientX - _panStartX);
+  preview.scrollTop  = _panScrollY - (e.clientY - _panStartY);
+});
+
+document.addEventListener('mouseup', () => {
+  if (!_panDragging) return;
+  _panDragging = false;
+  document.getElementById('fvPreview')?.classList.remove('fv-panning');
+});
+
+// Mouse wheel zoom in preview (Ctrl/Cmd + scroll)
+document.addEventListener('wheel', e => {
+  if (!e.ctrlKey && !e.metaKey) return;
+  const preview = document.getElementById('fvPreview');
+  if (!preview?.contains(e.target)) return;
+  e.preventDefault();
+  if (e.deltaY < 0) window.fvZoomIn();
+  else window.fvZoomOut();
+}, { passive: false });
+
+window.fvSetTool = function(tool) {
+  _annTool = tool;
+  // Re-render toolbar buttons
+  document.querySelectorAll('.ann-tool-btn').forEach(b => b.classList.remove('active'));
+  const map = { rect:'rect', circle:'circle', pen:'pen' };
+  document.querySelectorAll('.ann-tool-btn').forEach(b => {
+    if (b.getAttribute('onclick') === `fvSetTool('${tool}')`) b.classList.add('active');
+  });
+};
+
+window.fvToggleAnnotate = function() {
+  _annModeActive = !_annModeActive;
+  _annPending    = null;
+  _annDrawing    = false;
+  document.getElementById('fvAnnotateBtn')?.classList.toggle('active', _annModeActive);
+  const wrap = document.getElementById('fvAnnWrap');
+  if (wrap) wrap.classList.toggle('annotate-mode', _annModeActive);
+  document.getElementById('fvAnnTextPopup')?.remove();
+};
+
+// Lightweight: only refresh SVG shapes on the existing image (no DOM rebuild, no listener rebind)
+function fvRedrawShapes() {
+  const svgEl = document.getElementById('fvAnnSvg'); if (!svgEl) return;
+  const imgEl = document.getElementById('fvAnnImg');
+
+  // Ensure viewBox matches actual image dimensions before drawing
+  if (imgEl && imgEl.offsetWidth > 0) {
+    const w = imgEl.offsetWidth, h = imgEl.offsetHeight;
+    svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  }
+
+  const reviews = fvGetReviews();
+  const shapes  = reviews.filter(c => c.shape);
+  svgEl.innerHTML = shapes.map((c, i) => fvShapeToSvg(c, i+1)).join('');
+}
+
+function fvRenderAnnotatedImage(src) {
+  const prevEl  = document.getElementById('fvPreview');
+  const reviews = fvGetReviews();
+  const shapes  = reviews.filter(c => c.shape);
+
+  // The ann-wrap uses inline-flex so it hugs the image exactly.
+  // The SVG is absolutely positioned over only that image rect.
+  // getPct() in fvBindDrawing uses ann-wrap.getBoundingClientRect()
+  // which now matches the image precisely — no coord drift.
+  // ann-wrap is inline-block so it shrinks to exactly the image dimensions.
+  // SVG sits position:absolute over that same rect — perfect coordinate alignment.
+  // Reset any inline style — CSS handles layout now
+  prevEl.style.cssText = '';
+  prevEl.scrollTop = 0; // scroll to top when loading new image
+  prevEl.innerHTML = `
+    <div class="ann-wrap" id="fvAnnWrap">
+      <img id="fvAnnImg" src="${src}" draggable="false"
+           onerror="this.style.opacity='0.3'"/>
+      <svg class="ann-svg-layer" id="fvAnnSvg"
+           viewBox="0 0 100 100"
+           style="position:absolute;top:0;left:0;width:100%;height:100%;overflow:visible;border-radius:6px;pointer-events:none;"></svg>
+    </div>`;
+
+  // After image loads, update SVG viewBox to match actual pixel dimensions
+  // so shapes render with correct proportions (no stretching on tall images)
+  const imgEl = document.getElementById('fvAnnImg');
+  function _setupSvgViewBox() {
+    const svgEl = document.getElementById('fvAnnSvg');
+    if (!svgEl || !imgEl) return;
+    const w = imgEl.offsetWidth  || imgEl.naturalWidth  || 100;
+    const h = imgEl.offsetHeight || imgEl.naturalHeight || 100;
+    svgEl.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    // Re-draw shapes with correct coordinate space
+    svgEl.innerHTML = shapes.map((c,i) => fvShapeToSvg(c, i+1)).join('');
+  }
+  if (imgEl.complete && imgEl.naturalWidth) {
+    _setupSvgViewBox();
+  } else {
+    imgEl.addEventListener('load', _setupSvgViewBox, { once: true });
+    // Draw immediately with fallback viewBox, update after load
+    document.getElementById('fvAnnSvg').innerHTML = shapes.map((c,i) => fvShapeToSvg(c, i+1)).join('');
+  }
+
+  if (_annModeActive) document.getElementById('fvAnnWrap')?.classList.add('annotate-mode');
+  fvBindDrawing();
+}
+
+function fvPtsToSvg(pts) {
+  // pts is array of [x,y] pairs where x,y are 0-100 (matching viewBox)
+  if (!pts || !pts.length) return '';
+  return pts.map(p => `${p[0].toFixed(2)},${p[1].toFixed(2)}`).join(' ');
+}
+
+function fvShapeToSvg(c, num) {
+  const s     = c.shape;
+  const color = '#7c5cbf';
+  const isOwn = c.by === CURRENT_USER;
+
+  // Coordinates stored as 0-100 percentage values.
+  // SVG viewBox now matches actual pixel dimensions of the image.
+  // We convert percentages to pixels using the current viewBox size.
+  const svgEl = document.getElementById('fvAnnSvg');
+  const vb    = svgEl?.viewBox?.baseVal;
+  const VW    = vb?.width  || 100;   // viewBox width  (= image pixel width)
+  const VH    = vb?.height || 100;   // viewBox height (= image pixel height)
+
+  // Convert percentage coords to pixels
+  function px(val, axis) { return val * (axis === 'x' ? VW : VH) / 100; }
+
+  // Badge radius: target ~14px visual diameter, constant regardless of image size
+  const r   = 7;           // pixels in viewBox space (SVG pixel = screen pixel at 100% zoom)
+  const sw  = 1.5;         // stroke width in pixels — always 1.5px visually
+  const fs  = r * 1.1;     // font size in pixels
+
+  function badge(bxPx, byPx) {
+    const nx = Math.min(Math.max(bxPx, r+2), VW-r-2);
+    const ny = Math.min(Math.max(byPx, r+2), VH-r-2);
+    const gap = 2;  // gap between number badge and delete badge
+    const del = isOwn
+      ? `<rect x="${nx+r+gap}" y="${ny-r}" width="${r*2}" height="${r*2}" rx="${r*0.4}" fill="#e53e3e" style="cursor:pointer;pointer-events:all" onclick="fvDeleteAnnotation('${c.id}')"/>
+         <text x="${nx+r*2+gap}" y="${ny+0.5}" font-size="${fs*0.85}" font-weight="900" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">✕</text>`
+      : '';
+    return `<circle cx="${nx}" cy="${ny}" r="${r}" fill="${color}" style="cursor:pointer;pointer-events:all" onclick="fvScrollToComment('${c.id}')"/>
+      <text x="${nx}" y="${ny+0.5}" font-size="${fs}" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle" style="pointer-events:none">${num}</text>
+      ${del}`;
+  }
+
+  let shape = '';
+  if (s.type === 'rect') {
+    const x1 = px(Math.min(s.x1, s.x2), 'x'), y1 = px(Math.min(s.y1, s.y2), 'y');
+    const w  = px(Math.abs(s.x2 - s.x1), 'x'), h = px(Math.abs(s.y2 - s.y1), 'y');
+    shape = `<rect x="${x1}" y="${y1}" width="${w}" height="${h}" fill="${color}22" stroke="${color}" stroke-width="${sw}" rx="2"/>
+      ${badge(x1, y1)}`;
+  } else if (s.type === 'circle') {
+    const cx = px(s.cx, 'x'), cy = px(s.cy, 'y');
+    const rx = px(Math.max(Math.abs(s.rx)||2, 1), 'x');
+    const ry = px(Math.max(Math.abs(s.ry)||2, 1), 'y');
+    shape = `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${color}22" stroke="${color}" stroke-width="${sw}"/>
+      ${badge(cx - rx, cy - ry)}`;
+  } else if (s.type === 'pen') {
+    // pts = [[x%,y%], ...] — convert each to pixel coords matching viewBox
+    const pts = s.pts || (s.points ? s.points.split(/\s+/).reduce((a,v,i,arr)=>{ if(i%2===0)a.push([parseFloat(v),parseFloat(arr[i+1]||0)]); return a; },[]) : []);
+    // Convert percentage pts to pixel coords
+    const pxPts = pts.map(p => [px(p[0],'x'), px(p[1],'y')]);
+    const ptsStr = pxPts.map(p => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+    const badgeX = px(s.x0 || pts[0]?.[0] || 0, 'x');
+    const badgeY = px(s.y0 || pts[0]?.[1] || 0, 'y');
+    shape = ptsStr
+      ? `<polyline points="${ptsStr}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/>
+         ${badge(badgeX, badgeY)}`
+      : '';
+  }
+  return shape ? `<g class="ann-shape" data-cid="${c.id}">${shape}</g>` : '';
+}
+
+// ── Drawing interaction ────────────────────────────────────────────────────
+function fvBindDrawing() {
+  // Always work with live element reference inside each handler
+  function getWrap() { return document.getElementById('fvAnnWrap'); }
+
+  function getPct(e, w) {
+    const r  = w.getBoundingClientRect();
+    const cx = (e.touches || e.changedTouches)?.[0]?.clientX ?? e.clientX;
+    const cy = (e.touches || e.changedTouches)?.[0]?.clientY ?? e.clientY;
+    return { x: Math.min(100,Math.max(0,((cx-r.left)/r.width)*100)),
+             y: Math.min(100,Math.max(0,((cy-r.top)/r.height)*100)) };
+  }
+
+  function onDown(e) {
+    if (!_annModeActive) return;
+    if (e.target.closest('.ann-shape') || e.target.closest('#fvAnnTextPopup')) return;
+    e.preventDefault();
+    const w = getWrap(); if (!w) return;
+    _annDrawing = true;
+    _annStart   = getPct(e, w);
+    _annPending = null;
+    document.getElementById('fvAnnTextPopup')?.remove();
+
+    const svg = document.getElementById('fvAnnSvg'); if (!svg) return;
+    const tag = _annTool === 'pen' ? 'polyline' : (_annTool === 'circle' ? 'ellipse' : 'rect');
+    _annSvg = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    _annSvg.setAttribute('fill',   '#7c5cbf22');
+    _annSvg.setAttribute('stroke', '#7c5cbf');
+    _annSvg.setAttribute('stroke-width', '1.5'); // pixels in viewBox space = 1.5px visually
+    _annSvg.setAttribute('stroke-dasharray', '5,3');
+    if (_annTool === 'pen') {
+      _penPtsRaw = [[_annStart.x, _annStart.y]];
+      // Start point in pixel coords
+    { const _svgD = document.getElementById('fvAnnSvg');
+      const _vbWD = _svgD?.viewBox?.baseVal?.width||100, _vbHD = _svgD?.viewBox?.baseVal?.height||100;
+      _annSvg.setAttribute('points', `${(_annStart.x*_vbWD/100).toFixed(1)},${(_annStart.y*_vbHD/100).toFixed(1)}`); }
+      _annSvg.setAttribute('fill', 'none');
+      _annSvg.setAttribute('stroke-linecap', 'round');
+      _annSvg.setAttribute('stroke-linejoin', 'round');
+      _annSvg.setAttribute('stroke-dasharray', '');
+    }
+    svg.appendChild(_annSvg);
+  }
+
+  function onMove(e) {
+    if (!_annDrawing || !_annSvg || !_annStart) return;
+    e.preventDefault();
+    const w = getWrap(); if (!w) return;
+    const cur = getPct(e, w);
+    // Convert 0-100% coords to pixel coords for the live SVG viewBox
+    const _svgLive = document.getElementById('fvAnnSvg');
+    const _vbW = _svgLive?.viewBox?.baseVal?.width  || 100;
+    const _vbH = _svgLive?.viewBox?.baseVal?.height || 100;
+    function toPx(v, axis) { return v * (axis==='x' ? _vbW : _vbH) / 100; }
+
+    if (_annTool === 'rect') {
+      const x1 = toPx(Math.min(_annStart.x, cur.x),'x'), y1 = toPx(Math.min(_annStart.y, cur.y),'y');
+      _annSvg.setAttribute('x', x1);      _annSvg.setAttribute('y', y1);
+      _annSvg.setAttribute('width',  toPx(Math.abs(cur.x-_annStart.x),'x'));
+      _annSvg.setAttribute('height', toPx(Math.abs(cur.y-_annStart.y),'y'));
+    } else if (_annTool === 'circle') {
+      const cx = toPx((_annStart.x+cur.x)/2,'x'), cy = toPx((_annStart.y+cur.y)/2,'y');
+      _annSvg.setAttribute('cx', cx); _annSvg.setAttribute('cy', cy);
+      _annSvg.setAttribute('rx', toPx(Math.abs(cur.x-_annStart.x)/2,'x'));
+      _annSvg.setAttribute('ry', toPx(Math.abs(cur.y-_annStart.y)/2,'y'));
+    } else if (_annTool === 'pen') {
+      _penPtsRaw.push([cur.x, cur.y]);
+      // Store as %, render as px for live preview
+      _annSvg.setAttribute('points', _penPtsRaw.map(p => `${toPx(p[0],'x').toFixed(1)},${toPx(p[1],'y').toFixed(1)}`).join(' '));
+    }
+  }
+
+  function onUp(e) {
+    if (!_annDrawing || !_annStart) return;
+    _annDrawing = false;
+    const w   = getWrap(); if (!w) return;
+    const end = getPct(e, w);
+    const start = { ..._annStart };
+
+    // ── Capture pen path BEFORE touching _annSvg ──
+    let penPts = null;
+    if (_annTool === 'pen' && _annSvg) {
+      penPts = _penPtsRaw.length >= 2 ? [..._penPtsRaw] : [[start.x, start.y],[end.x, end.y]];
+    }
+
+    _annStart = null;
+    _penPtsRaw = [];
+
+    // Require meaningful drag (> 1% for shapes, any movement for pen)
+    const dx = Math.abs(end.x - start.x), dy = Math.abs(end.y - start.y);
+    const tooSmall = (_annTool !== 'pen' && dx < 1 && dy < 1) || (_annTool === 'pen' && !penPts);
+    if (tooSmall) { _annSvg?.remove(); _annSvg = null; return; }
+
+    // Keep shape visible as a ghost while user types the comment
+    // Change to solid so it looks like a preview of the final annotation
+    if (_annSvg) {
+      _annSvg.setAttribute('stroke-dasharray', '');
+      _annSvg.setAttribute('opacity', '0.7');
+      // Don't remove — will be removed by fvSubmitAnnotation/fvCancelAnnotation
+    }
+
+    let shapeData;
+    if (_annTool === 'rect') {
+      shapeData = { type:'rect', x1:start.x, y1:start.y, x2:end.x, y2:end.y };
+    } else if (_annTool === 'circle') {
+      shapeData = { type:'circle', cx:(start.x+end.x)/2, cy:(start.y+end.y)/2,
+                    rx:Math.abs(end.x-start.x)/2, ry:Math.abs(end.y-start.y)/2 };
+    } else {
+      // Store as array of [x,y] pairs (raw %) — rendered via fvPtsToSvg()
+      shapeData = { type:'pen', pts:penPts, x0:start.x, y0:start.y };
+    }
+    _annPending = shapeData;
+    fvShowShapeTextInput(end.x, end.y);
+  }
+
+  // Attach listeners directly — no cloning (cloning loses SVG state)
+  const w = getWrap(); if (!w) return;
+  // Remove any previous listeners by replacing just the element's event handlers
+  // We use named functions stored on the element itself to allow clean removal
+  if (w._fvBound) {
+    w.removeEventListener('mousedown',  w._fvBound.down);
+    w.removeEventListener('mousemove',  w._fvBound.move);
+    w.removeEventListener('mouseup',    w._fvBound.up);
+    w.removeEventListener('touchstart', w._fvBound.down);
+    w.removeEventListener('touchmove',  w._fvBound.move);
+    w.removeEventListener('touchend',   w._fvBound.up);
+  }
+  w._fvBound = { down:onDown, move:onMove, up:onUp };
+  w.addEventListener('mousedown',  onDown);
+  w.addEventListener('mousemove',  onMove);
+  w.addEventListener('mouseup',    onUp);
+  w.addEventListener('touchstart', onDown, {passive:false});
+  w.addEventListener('touchmove',  onMove, {passive:false});
+  w.addEventListener('touchend',   onUp,   {passive:false});
+  if (_annModeActive) w.classList.add('annotate-mode');
+}
+
+function fvShowShapeTextInput(x, y) {
+  document.getElementById('fvAnnTextPopup')?.remove();
+  const wrap = document.getElementById('fvAnnWrap'); if (!wrap) return;
+  const popLeft = Math.min(x, 60);
+  const popTop  = Math.min(y + 3, 75);
+  const popup = document.createElement('div');
+  popup.id = 'fvAnnTextPopup';
+  popup.className = 'ann-pin-input';
+  popup.style.cssText = `left:${popLeft}%;top:${popTop}%;`;
+  popup.innerHTML = `
+    <div class="fv-input-mention-wrap" style="position:relative">
+      <textarea id="fvAnnTextarea" class="fv-comment-input" placeholder="Add note… use @ to tag" rows="2"
+        oninput="fvHandleMention(event)" onkeydown="fvMentionKey(event);if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();fvSubmitAnnotation();}" style="font-size:12px;resize:none;"></textarea>
+      <div class="fv-mention-popup" style="display:none;bottom:100%;top:auto"></div>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:6px;justify-content:flex-end">
+      <button class="btn-ghost" style="font-size:11px;padding:4px 8px" onclick="fvCancelAnnotation()">Cancel</button>
+      <button class="btn-primary" style="font-size:11px;padding:4px 10px;width:auto;height:auto;border-radius:var(--radius-sm)" onclick="fvSubmitAnnotation()">Add</button>
+    </div>`;
+  wrap.appendChild(popup);
+  popup.querySelector('textarea')?.focus();
+}
+
+window.fvCancelAnnotation = function() {
+  _annPending = null;
+  document.getElementById('fvAnnTextPopup')?.remove();
+  // Remove the ghost preview shape
+  if (_annSvg) { _annSvg.remove(); _annSvg = null; }
+};
+
+window.fvSubmitAnnotation = async function() {
+  if (!_annPending) return;
+  const ta   = document.getElementById('fvAnnTextarea');
+  const text = ta?.value.trim();
+
+  if (_fvRedrawingCid) {
+    // ── Redraw mode: update shape on existing comment ──
+    const cached = fvCacheGet();
+    const existing = cached?.[_fvRedrawingCid];
+    if (existing) {
+      const updated = { ...existing, shape: _annPending, editedAt: Date.now() };
+      // If user also typed new text, update that too
+      if (text) updated.text = text;
+      fvCacheUpdate(_fvRedrawingCid, updated);
+      fvRedrawShapes();
+      fvRenderComments();
+      await fvUpdateReview(_fvRedrawingCid, updated).catch(console.error);
+    }
+    _fvRedrawingCid = null;
+  } else {
+    // ── New annotation ──
+    if (!text) return; // text required for new annotations
+    const comment = { id:fvCid(), by:CURRENT_USER, at:Date.now(), text, shape:_annPending, replies:[], likes:{} };
+    try {
+      await fvSaveReview(comment);
+    } catch(err) {
+      console.error('[Review] Save annotation failed:', err);
+      alert('Failed to save annotation: ' + (err.message||err));
+      return;
+    }
+    fvRedrawShapes();
+    fvRenderComments();
+  }
+
+  _annPending    = null;
+  _annModeActive = false;
+  document.getElementById('fvAnnTextPopup')?.remove();
+  document.getElementById('fvAnnotateBtn')?.classList.remove('active');
+  document.getElementById('fvAnnWrap')?.classList.remove('annotate-mode');
+  // Remove ghost preview — real shape now rendered by fvRedrawShapes
+  if (_annSvg) { _annSvg.remove(); _annSvg = null; }
+};
+
+window.fvScrollToComment = function(cid) {
+  // 1. Scroll the comment panel to the comment
+  const el = document.getElementById('fvc-'+cid);
+  if (el) {
+    el.scrollIntoView({behavior:'smooth', block:'nearest'});
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1200);
+  }
+  // 2. Scroll the image preview to the annotation position
+  fvScrollPreviewToShape(cid);
+};
+
+// Scroll the preview panel so the annotation shape is visible
+function fvScrollPreviewToShape(cid) {
+  const preview = document.getElementById('fvPreview');
+  const svg     = document.getElementById('fvAnnSvg');
+  const img     = document.getElementById('fvAnnImg');
+  if (!preview || !svg || !img) return;
+
+  // Find the shape group for this comment
+  const group = svg.querySelector(`.ann-shape[data-cid="${cid}"]`);
+  if (!group) return;
+
+  // Get the bounding box of the shape in SVG viewBox coords (0-100)
+  // We use the first shape element inside the group
+  const shape = group.querySelector('rect,ellipse,polyline,circle:first-of-type');
+  if (!shape) return;
+
+  // Get the y-percentage of the shape center from the SVG element
+  // The SVG has viewBox="0 0 100 100" and covers the full image height
+  // Coords are now in pixel space (matching viewBox = image pixel dims)
+  // Read the pixel y position from the shape and convert to scroll position
+  let yPx = img.offsetHeight / 2; // default to middle
+  const tag = shape.tagName.toLowerCase();
+  const svgForScroll = document.getElementById('fvAnnSvg');
+  const vbH = svgForScroll?.viewBox?.baseVal?.height || img.offsetHeight || 100;
+
+  if (tag === 'rect') {
+    yPx = (parseFloat(shape.getAttribute('y') || 0) / vbH) * img.offsetHeight;
+  } else if (tag === 'ellipse') {
+    yPx = (parseFloat(shape.getAttribute('cy') || 0) / vbH) * img.offsetHeight;
+  } else if (tag === 'polyline') {
+    const pts = (shape.getAttribute('points') || '').split(/[,\s]+/).filter(Boolean);
+    if (pts.length >= 2) yPx = (parseFloat(pts[1]) / vbH) * img.offsetHeight;
+  } else if (tag === 'circle') {
+    yPx = (parseFloat(shape.getAttribute('cy') || 0) / vbH) * img.offsetHeight;
+  }
+
+  const imgHeight = img.offsetHeight;
+  const targetY   = yPx;
+  const previewH     = preview.offsetHeight;
+
+  // Scroll so the shape is centered vertically in the visible area
+  // Add padding offset (12px) so it's not flush against the edge
+  const scrollTarget = targetY - (previewH / 2) + 12;
+  preview.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
+}
+
+// ── Comment renderer ───────────────────────────────────────────────────────
+function fvRenderComments() {
+  const listEl  = document.getElementById('fvCommentsList'); if (!listEl) return;
+  const reviews = fvGetReviews();
+  if (!reviews.length) {
+    listEl.innerHTML = `<div style="color:var(--text-3);font-size:12px;padding:12px 0;text-align:center">No feedback yet.</div>`;
+    return;
+  }
+  listEl.innerHTML = reviews.map((c,i) => fvCommentHtml(c, i)).join('');
+  listEl.scrollTop = listEl.scrollHeight;
+}
+
+function fvLikeHtml(c, parentId) {
+  const likes   = c.likes || {};
+  const count   = Object.keys(likes).length;
+  const liked   = !!likes[CURRENT_USER];
+  const pid     = parentId ? `'${parentId}'` : 'null';
+  return `<button class="fv-like-btn ${liked?'liked':''}" onclick="fvToggleLike('${c.id}',${pid})" title="${liked?'Unlike':'Like'}">
+    ${liked?'❤️':'🤍'}<span class="fv-like-count">${count||''}</span>
+  </button>`;
+}
+
+function fvCommentHtml(c, idx) {
+  const isOwn    = c.by === CURRENT_USER;
+  const uData    = DEFAULT_USERS[c.by] || { name:c.by, av:'?', cls:'av-jc' };
+  const replies  = (c.replies||[]).filter(r=>!r.deleted);
+  const hasShape = !!c.shape;
+  const shapeIcon = hasShape ? ({rect:'⬜',circle:'⭕',pen:'✏️'}[c.shape.type]||'📌') : '';
+
+  const repliesHtml = replies.map(r => {
+    const ru      = DEFAULT_USERS[r.by]||{name:r.by,av:'?',cls:'av-jc'};
+    const isOwnR  = r.by === CURRENT_USER;
+    const rLiked  = !!(r.likes||{})[CURRENT_USER];
+    const rLikeCount = Object.keys(r.likes||{}).length;
+    return `<div class="fv-reply" id="fvc-${r.id}">
+      <div class="fv-comment-meta">
+        <div class="av av-sm ${ru.cls}" style="width:18px;height:18px;font-size:8px;font-weight:700;flex-shrink:0">${ru.av}</div>
+        <span class="fv-comment-author">${ru.name}</span>
+        <span class="fv-comment-time">${timeAgo(r.at)}</span>
+        <div class="fv-comment-actions">
+          ${fvLikeHtml(r, c.id)}
+          ${isOwnR?`<button onclick="fvEditComment('${c.id}','${r.id}')" title="Edit">✏</button>
+          <button onclick="fvDeleteComment('${c.id}','${r.id}')" title="Delete">🗑</button>`:''}
+        </div>
+      </div>
+      ${_fvEditingId===r.id ? fvEditInputHtml(r.id,r.text,c.id) : `<div class="fv-comment-text">${fvFormatText(r.text)}${r.editedAt?'<span style="font-size:10px;color:var(--text-3)"> (edited)</span>':''}</div>`}
+    </div>`;
+  }).join('');
+
+  // Annotation-specific actions: edit shape (redraw), delete annotation
+  const annActions = hasShape && isOwn ? `
+    <button class="fv-ann-action" onclick="fvEditAnnotationShape('${c.id}')" title="Redraw shape">✏ Shape</button>
+    <button class="fv-ann-action danger" onclick="fvDeleteAnnotation('${c.id}')" title="Delete annotation">🗑 Ann.</button>` : '';
+
+  return `<div class="fv-comment ${hasShape?'is-ann':''}" id="fvc-${c.id}">
+    <div class="fv-comment-meta">
+      ${hasShape?`<span class="ann-shape-badge" onclick="fvHighlightShape('${c.id}')" title="Jump to annotation">${idx+1}</span>`:''}
+      <div class="av av-sm ${uData.cls}" style="width:22px;height:22px;font-size:9px;font-weight:700;flex-shrink:0">${uData.av}</div>
+      <span class="fv-comment-author">${uData.name}</span>
+      <span class="fv-comment-time">${timeAgo(c.at)}</span>
+      <div class="fv-comment-actions">
+        ${fvLikeHtml(c, null)}
+        <button onclick="fvStartReply('${c.id}')" title="Reply">↩</button>
+        ${isOwn?`<button onclick="fvEditComment('${c.id}',null)" title="Edit text">✏</button>
+        <button onclick="fvDeleteComment('${c.id}',null)" title="Delete">🗑</button>`:''}
+      </div>
+    </div>
+    ${_fvEditingId===c.id ? fvEditInputHtml(c.id,c.text,null) : `<div class="fv-comment-text">${shapeIcon?`<span style="font-size:10px;color:var(--text-3);margin-right:3px">${shapeIcon}</span>`:''}${fvFormatText(c.text)}${c.editedAt?'<span style="font-size:10px;color:var(--text-3)"> (edited)</span>':''}</div>`}
+    ${annActions ? `<div class="fv-ann-actions">${annActions}</div>` : ''}
+    ${repliesHtml?`<div class="fv-replies">${repliesHtml}</div>`:''}
+    ${_fvReplyingTo===c.id?fvReplyInputHtml(c.id):''}
+  </div>`;
+}
+
+function fvEditInputHtml(cid, txt, parentId) {
+  return `<div class="fv-input-mention-wrap" style="position:relative;margin-top:4px">
+    <textarea id="fv-edit-${cid}" class="fv-comment-input" rows="2"
+      oninput="fvHandleMention(event)" onkeydown="fvMentionKey(event)"
+      style="font-size:12px;resize:none;">${(txt||'').replace(/</g,'&lt;')}</textarea>
+    <div class="fv-mention-popup" style="display:none"></div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      <button class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="fvCancelEdit()">Cancel</button>
+      <button class="btn-primary" style="font-size:11px;padding:3px 8px;width:auto;height:auto;border-radius:var(--radius-sm)"
+        onclick="fvSaveEdit('${cid}','${parentId||''}')">Save</button>
+    </div>
+  </div>`;
+}
+
+function fvReplyInputHtml(parentId) {
+  return `<div class="fv-reply-input" style="margin-top:8px">
+    <div class="fv-input-mention-wrap" style="position:relative">
+      <textarea id="fv-reply-${parentId}" class="fv-comment-input" rows="2" placeholder="Reply… use @ to tag"
+        oninput="fvHandleMention(event)" onkeydown="fvMentionKey(event);if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();fvPostReply('${parentId}');}"
+        style="font-size:12px;resize:none;"></textarea>
+      <div class="fv-mention-popup" style="display:none"></div>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:4px">
+      <button class="btn-ghost" style="font-size:11px;padding:3px 8px" onclick="fvCancelReply()">Cancel</button>
+      <button class="btn-primary" style="font-size:11px;padding:3px 8px;width:auto;height:auto;border-radius:var(--radius-sm)"
+        onclick="fvPostReply('${parentId}')">Reply</button>
+    </div>
+  </div>`;
+}
+
+// ── Comment CRUD ───────────────────────────────────────────────────────────
+window.fvSwitchFile    = function(idx) { _fvFileIdx=idx; _fvVersionIdx=null; _annModeActive=false; _annPending=null; _fvZoom=1.0; _vcClear(); fvRender(); };
+window.fvSwitchVersion = function(idx) { _fvVersionIdx=idx; _annModeActive=false; _annPending=null; _fvZoom=1.0; const p=document.getElementById('fvPreview'); if(p) p.scrollTop=0; fvRender(); };
+window.fvStartReply    = function(cid) { _fvReplyingTo=cid; _fvEditingId=null; fvRenderComments(); setTimeout(()=>document.getElementById('fv-reply-'+cid)?.focus(),50); };
+window.fvCancelReply   = function()    { _fvReplyingTo=null; fvRenderComments(); };
+window.fvEditComment   = function(cid,rid) { _fvEditingId=rid||cid; _fvReplyingTo=null; fvRenderComments(); setTimeout(()=>document.getElementById('fv-edit-'+(rid||cid))?.focus(),50); };
+window.fvCancelEdit    = function()    { _fvEditingId=null; fvRenderComments(); };
+
+window.fvHighlightShape = function(cid) {
+  // Highlight the shape on the image
+  document.querySelectorAll('.ann-shape').forEach(g => g.classList.remove('ann-highlight'));
+  const g = document.querySelector(`.ann-shape[data-cid="${cid}"]`);
+  if (g) {
+    g.classList.add('ann-highlight');
+    setTimeout(() => g.classList.remove('ann-highlight'), 1500);
+  }
+  // Scroll preview to show this annotation
+  fvScrollPreviewToShape(cid);
+};
+
+window.fvPostComment = async function() {
+  const input = document.getElementById('fvCommentInput');
+  const text  = input?.value.trim(); if (!text) return;
+  const comment = { id:fvCid(), by:CURRENT_USER, at:Date.now(), text, replies:[], likes:{} };
+  input.value = '';
+  input.disabled = true;
+  try {
+    await fvSaveReview(comment); // cache updated inside, so render shows it immediately
+    fvRenderComments();
+  } catch(err) {
+    console.error('[Review] Post comment failed:', err);
+    alert('Failed to post: ' + (err.message||err));
+  } finally {
+    input.disabled = false;
+    input.focus();
+  }
+};
+
+window.fvPostReply = async function(parentId) {
+  const ta   = document.getElementById('fv-reply-'+parentId);
+  const text = ta?.value.trim(); if (!text) return;
+  // Read parent from local cache first, then Firebase
+  const cached = fvCacheGet() || {};
+  const fbData = allProjects().find(x => x.id === _fvProjectId)?.fileReviews?.[fvReviewKey()] || {};
+  const parent = cached[parentId] || fbData[parentId]; if (!parent) return;
+  const reply  = { id:fvCid(), by:CURRENT_USER, at:Date.now(), text };
+  const newReplies = [...(parent.replies||[]), reply];
+  // Update cache immediately
+  fvCacheUpdate(parentId, { replies: newReplies });
+  _fvReplyingTo = null;
+  fvRenderComments();
+  try {
+    await fvUpdateReview(parentId, { replies: newReplies });
+  } catch(err) {
+    console.error('[Review] Post reply failed:', err);
+    alert('Failed to post reply: ' + (err.message||err));
+  }
+};
+
+window.fvSaveEdit = async function(cid, parentId) {
+  const ta   = document.getElementById('fv-edit-'+cid);
+  const text = ta?.value.trim(); if (!text) return;
+  const editedAt = Date.now();
+  _fvEditingId = null;
+  if (parentId) {
+    // editing a reply — find parent from cache
+    const cached = fvCacheGet() || {};
+    const parent = cached[parentId]; if (!parent) return;
+    const replies = (parent.replies||[]).map(r => r.id===cid ? {...r,text,editedAt} : r);
+    fvCacheUpdate(parentId, { replies });
+    fvRenderComments();
+    await fvUpdateReview(parentId, { replies }).catch(e => console.error('[Review] Edit reply failed:', e));
+  } else {
+    fvCacheUpdate(cid, { text, editedAt });
+    fvRenderComments();
+    await fvUpdateReview(cid, { text, editedAt }).catch(e => console.error('[Review] Edit failed:', e));
+  }
+};
+
+window.fvDeleteComment = async function(cid, rid) {
+  if (!confirm(rid?'Delete this reply?':'Delete this comment?')) return;
+  // Warm cache from Firebase before mutating
+  const _dp = allProjects().find(x => x.id === _fvProjectId);
+  if (_dp) fvSyncFromFirebase(_dp);
+  if (rid) {
+    const cached = fvCacheGet() || {};
+    const parent = cached[cid]; if (!parent) return;
+    const replies = (parent.replies||[]).map(r => r.id===rid ? {...r,deleted:true} : r);
+    fvCacheUpdate(cid, { replies });
+    fvRenderComments();
+    await fvUpdateReview(cid, { replies }).catch(e => console.error('[Review] Delete reply failed:', e));
+  } else {
+    fvCacheUpdate(cid, { deleted: true });
+    fvRenderComments();
+    await fvRemoveReview(cid).catch(e => console.error('[Review] Delete failed:', e));
+  }
+};
+
+// ── Like / Unlike ────────────────────────────────────────────────────────
+window.fvToggleLike = async function(cid, parentId) {
+  // Ensure cache is populated from Firebase before toggling
+  const _lp = allProjects().find(x => x.id === _fvProjectId);
+  if (_lp) fvSyncFromFirebase(_lp);
+  const cached = fvCacheGet(); if (!cached) return;
+  if (parentId) {
+    // Reply like
+    const parent = cached[parentId]; if (!parent) return;
+    const replies = (parent.replies||[]).map(r => {
+      if (r.id !== cid) return r;
+      const likes = { ...(r.likes||{}) };
+      if (likes[CURRENT_USER]) delete likes[CURRENT_USER];
+      else likes[CURRENT_USER] = true;
+      return { ...r, likes };
+    });
+    fvCacheUpdate(parentId, { replies });
+    fvRenderComments();
+    await fvUpdateReview(parentId, { replies }).catch(console.error);
+  } else {
+    // Top-level comment like
+    const c = cached[cid]; if (!c) return;
+    const likes = { ...(c.likes||{}) };
+    if (likes[CURRENT_USER]) delete likes[CURRENT_USER];
+    else likes[CURRENT_USER] = true;
+    fvCacheUpdate(cid, { likes });
+    fvRenderComments();
+    await fvUpdateReview(cid, { likes }).catch(console.error);
+  }
+};
+
+// ── Edit annotation shape (redraw) ────────────────────────────────────────
+// Stores the comment id being redrawn so fvSubmitAnnotation knows to update not create
+
+
+window.fvEditAnnotationShape = function(cid) {
+  _fvRedrawingCid = cid;
+  _annModeActive  = true;
+  _annPending     = null;
+  const btn = document.getElementById('fvAnnotateBtn');
+  btn?.classList.add('active');
+  const wrap = document.getElementById('fvAnnWrap');
+  wrap?.classList.add('annotate-mode');
+  // Show instruction toast
+  fvToast('Draw the new shape on the image');
+};
+
+// ── Delete single annotation (shape + comment) ────────────────────────────
+window.fvDeleteAnnotation = async function(cid) {
+  if (!confirm('Delete this annotation and its shape?')) return;
+  // Ensure cache is warm from Firebase before marking deleted
+  const p = allProjects().find(x => x.id === _fvProjectId);
+  if (p) fvSyncFromFirebase(p);
+  fvCacheUpdate(cid, { deleted: true });
+  fvRedrawShapes();
+  fvRenderComments();
+  await fvRemoveReview(cid).catch(console.error);
+};
+
+// ── Clear all annotations for current version ─────────────────────────────
+window.fvClearAllAnnotations = async function() {
+  // Warm cache from Firebase before reading
+  const p = allProjects().find(x => x.id === _fvProjectId);
+  if (p) fvSyncFromFirebase(p);
+  const reviews = fvGetReviews();
+  const shapes  = reviews.filter(c => c.shape);
+  if (!shapes.length) { fvToast('No annotations to clear'); return; }
+  if (!confirm(`Clear all ${shapes.length} annotation${shapes.length>1?'s':''}?`)) return;
+  for (const c of shapes) {
+    fvCacheUpdate(c.id, { deleted: true });
+    await fvRemoveReview(c.id).catch(console.error);
+  }
+  fvRedrawShapes();
+  fvRenderComments();
+};
+
+// ── Toast helper ──────────────────────────────────────────────────────────
+function fvToast(msg) {
+  let t = document.getElementById('fvToast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'fvToast';
+    t.className = 'fv-toast';
+    document.getElementById('fileViewerModal')?.querySelector('.modal-review')?.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._tid);
+  t._tid = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+window.fvUploadNewVersion = async function(event) {
+  const file = event.target.files[0]; if (!file) return;
+  if (file.size > 10*1024*1024) { alert("Max 10MB per file."); return; }
+  event.target.value = "";
+
+  const btn = document.getElementById("fvActions")?.querySelector("label");
+  if (btn) btn.childNodes[0].textContent = " Processing…";
+
+  let b64;
+  try {
+    b64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload  = e => resolve(e.target.result);
+      reader.onerror = () => reject(new Error("Could not read file"));
+      reader.readAsDataURL(file);
+    });
+  } catch(err) {
+    alert("Failed to read file: " + err.message);
+    if (btn) btn.childNodes[0].textContent = "↑ New version";
+    return;
+  }
+
+  const p = allProjects().find(x => x.id === _fvProjectId);
+  if (!p) { if (btn) btn.childNodes[0].textContent = "↑ New version"; return; }
+
+  const sp       = p.space || getCurrentSpace() || "email";
+  const basePath = `spaces/${sp}/projects/${p.id}`;
+
+  // ── Read the REAL Firebase versions (not fvGetSlot which wraps flat files) ──
+  // We need the raw p.files[idx].versions to know if versions already exist in DB
+  const rawFiles = p.files
+    ? (Array.isArray(p.files) ? p.files : Object.keys(p.files).sort((a,b)=>Number(a)-Number(b)).map(k=>p.files[k]))
+    : [];
+  const rawSlot     = rawFiles[_fvFileIdx] || {};
+  const rawVersions = rawSlot.versions
+    ? (Array.isArray(rawSlot.versions) ? rawSlot.versions : Object.keys(rawSlot.versions).sort((a,b)=>Number(a)-Number(b)).map(k=>rawSlot.versions[k]))
+    : null; // null = no versions node in Firebase yet
+
+  // Build the new version object
+  const newVer = { fileName: file.name, fileType: file.type, fileData: b64,
+                   uploadedBy: CURRENT_USER, uploadedAt: Date.now() };
+
+  // ── Determine what to write ──
+  let versionsToCache; // what we'll put in the local cache for instant render
+
+  try {
+    if (!rawVersions) {
+      // First time adding versioning — write v0 (original flat file) AND v1 (new)
+      // This preserves the original so you can always go back
+      const v0 = {
+        fileName:   rawSlot.fileName  || p.fileName  || file.name,
+        fileType:   rawSlot.fileType  || p.fileType  || file.type,
+        fileData:   rawSlot.fileData  || p.fileData  || null,
+        fileUrl:    rawSlot.fileUrl   || p.fileUrl   || null,
+        uploadedBy: rawSlot.uploadedBy || p.uploadedBy || "jc",
+        uploadedAt: rawSlot.uploadedAt || p.createdAt || Date.now(),
+      };
+      await fbSet(ref(db, `${basePath}/files/${_fvFileIdx}/versions/0`), v0);
+      await fbSet(ref(db, `${basePath}/files/${_fvFileIdx}/versions/1`), newVer);
+      versionsToCache = [v0, newVer];
+      _fvVersionIdx = 1;
+    } else {
+      // Versions already exist — append at next index
+      const nextIdx = rawVersions.length;
+      await fbSet(ref(db, `${basePath}/files/${_fvFileIdx}/versions/${nextIdx}`), newVer);
+      versionsToCache = [...rawVersions, newVer];
+      _fvVersionIdx = nextIdx;
+    }
+
+    // Update legacy top-level fields → always points to latest version
+    if (_fvFileIdx === 0) {
+      await fbUpdate(ref(db, basePath), { fileName: file.name, fileType: file.type, fileData: b64 });
+    }
+    await fbUpdate(ref(db, `${basePath}/files/${_fvFileIdx}`), { fileName: file.name, fileType: file.type });
+
+  } catch(err) {
+    console.error("[Upload] New version failed:", err);
+    alert("Failed to upload: " + (err.message || err));
+    if (btn) btn.childNodes[0].textContent = "↑ New version";
+    return;
+  }
+
+  // ── Update local cache so fvRender shows new version immediately ──
+  _vcSet(versionsToCache);
+
+  if (btn) btn.childNodes[0].textContent = "↑ New version";
+  fvRender();
+};
+
+// ── Delete a specific version ─────────────────────────────────────────────
+window.fvDeleteVersion = async function(verIdx) {
+  const p = allProjects().find(x => x.id === _fvProjectId); if (!p) return;
+  const slot = fvGetSlot(p, _fvFileIdx); if (!slot) return;
+
+  // Use version cache so we operate on the same data fvRender sees
+  const versions = fvGetVersions(slot);
+
+  if (versions.length <= 1) {
+    alert("Can't delete the only version — it's the last one."); return;
+  }
+  const ver = versions[verIdx];
+  if (!ver) { alert("Version not found."); return; }
+  if (!confirm(`Delete v${verIdx+1} "${ver.fileName}"?\nThis cannot be undone.`)) return;
+
+  const sp        = p.space || getCurrentSpace() || 'email';
+  const verPath   = `spaces/${sp}/projects/${p.id}/files/${_fvFileIdx}/versions`;
+  const remaining = versions.filter((_, i) => i !== verIdx);
+  const newLatest = remaining[remaining.length - 1];
+
+  // Fix current view index
+  if (_fvVersionIdx === verIdx || _fvVersionIdx >= remaining.length) {
+    _fvVersionIdx = remaining.length - 1;
+  } else if (_fvVersionIdx > verIdx) {
+    _fvVersionIdx--;
+  }
+
+  // ── Optimistic: update cache immediately, render shows it now ──
+  _vcSet(remaining);
+  fvToast(`Deleting v${verIdx+1}…`);
+  fvRender();
+
+  try {
+    // Remove the gap node, then re-index sequentially
+    await fbRemove(ref(db, `${verPath}/${verIdx}`));
+    for (let ni = 0; ni < remaining.length; ni++) {
+      await fbSet(ref(db, `${verPath}/${ni}`), remaining[ni]);
+    }
+    // Update legacy top-level fields
+    if (_fvFileIdx === 0 && newLatest) {
+      await fbUpdate(ref(db, `spaces/${sp}/projects/${p.id}`), {
+        fileName: newLatest.fileName, fileType: newLatest.fileType,
+        fileData: newLatest.fileData || null, fileUrl: newLatest.fileUrl || null,
+      });
+    }
+    if (newLatest) {
+      await fbUpdate(ref(db, `spaces/${sp}/projects/${p.id}/files/${_fvFileIdx}`), {
+        fileName: newLatest.fileName, fileType: newLatest.fileType,
+      });
+    }
+    fvToast(`v${verIdx+1} deleted`);
+  } catch(err) {
+    console.error('[Version] Delete failed:', err);
+    // Revert cache on failure
+    _vcSet(versions);
+    fvRender();
+    alert('Failed to delete: ' + (err.message || err));
+  }
+};
+// Download current version
+window.fvDownloadCurrent = function() {
+  const p    = allProjects().find(x => x.id === _fvProjectId); if (!p) return;
+  const slot = fvGetSlot(p, _fvFileIdx); if (!slot) return;
+  const ver  = fvCurrentVersion(slot);
+  const src  = ver.fileUrl || ver.fileData;
+  if (!src) return;
+  const a = document.createElement("a");
+  a.href = src; a.download = ver.fileName; a.target = "_blank";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+};
+
+// Download all versions of current file slot
+window.downloadAllFiles = function() {
+  const p    = allProjects().find(x => x.id === _fvProjectId); if (!p) return;
+  const slot = fvGetSlot(p, _fvFileIdx); if (!slot) return;
+  const versions = slot.versions || [];
+  versions.forEach((ver, i) => {
+    const src = ver.fileUrl || ver.fileData; if (!src) return;
+    setTimeout(() => {
+      const a = document.createElement("a");
+      const ext  = ver.fileName.split(".").pop();
+      const base = ver.fileName.replace(/\.[^.]+$/, "");
+      a.href = src; a.download = `${base}_v${i+1}.${ext}`; a.target = "_blank";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }, i * 300); // stagger to avoid browser blocking
+  });
+};
+
+// Helper — returns unified files array from p.files[] + legacy p.fileName
+// Get the display src for a file slot — always the latest version's data
+function getSlotDisplaySrc(slot) {
+  if (slot?.versions) {
+    const versions = Array.isArray(slot.versions)
+      ? slot.versions
+      : Object.keys(slot.versions).sort((a,b) => Number(a)-Number(b)).map(k => slot.versions[k]);
+    const latest = versions[versions.length - 1];
+    return latest?.fileUrl || latest?.fileData || null;
+  }
+  return slot?.fileUrl || slot?.fileData || null;
+}
+
+function getSlotDisplayType(slot) {
+  if (slot?.versions) {
+    const versions = Array.isArray(slot.versions)
+      ? slot.versions
+      : Object.keys(slot.versions).sort((a,b) => Number(a)-Number(b)).map(k => slot.versions[k]);
+    const latest = versions[versions.length - 1];
+    return latest?.fileType || slot?.fileType || null;
+  }
+  return slot?.fileType || null;
+}
+
+function getProjectFiles(p) {
+  if (p.files) {
+    // Firebase RTDB may return arrays as objects with numeric string keys
+    const arr = Array.isArray(p.files)
+      ? p.files
+      : Object.keys(p.files)
+          .sort((a,b) => Number(a)-Number(b))
+          .map(k => p.files[k]);
+    if (arr.length) return arr;
+  }
+  // Legacy flat format
+  if (p.fileUrl || p.fileData) return [{ fileName: p.fileName, fileType: p.fileType, fileUrl: p.fileUrl, fileData: p.fileData, filePath: p.filePath }];
+  return [];
+}
 
 const uploadArea = document.getElementById("fileUploadArea");
 if (uploadArea) {
@@ -740,15 +2283,15 @@ if (uploadArea) {
   uploadArea.addEventListener("dragleave", () => uploadArea.classList.remove("dragging"));
   uploadArea.addEventListener("drop", e => {
     e.preventDefault(); uploadArea.classList.remove("dragging");
-    const file = e.dataTransfer.files[0];
-    if (file) { const dt=new DataTransfer(); dt.items.add(file); document.getElementById("fileInput").files=dt.files; handleFileSelect({target:{files:[file]}}); }
+    const files = e.dataTransfer.files;
+    if (files.length) handleFileSelect({ target: { files } });
   });
 }
 
 // ── Project modal ──────────────────────────────────────────────────────────
 window.openNewProject = function(stageId=1) {
   try {
-    editingId=null; pendingFile=null; fileRemoved=false;
+    editingId=null; pendingFiles=[]; removedFilePaths=[]; _editingSavedFiles=[];
     // Rebuild dropdown for current space before opening
     buildStageDropdown();
     buildTypeButtons();
@@ -772,7 +2315,7 @@ window.openNewProject = function(stageId=1) {
     alert("Error opening project form: " + err.message);
   }
 };
-window.closeModal = () => { document.getElementById("projectModal").classList.remove("open"); pendingFile=null; fileRemoved=false; };
+window.closeModal = () => { document.getElementById("projectModal").classList.remove("open"); pendingFiles=[]; removedFilePaths=[]; _editingSavedFiles=[]; };
 window.closeModalOutside = e => { if (e.target.id==="projectModal") closeModal(); };
 window.setSeg = (btn, gid) => {
   document.querySelectorAll(`#${gid} .seg-btn`).forEach(b => b.classList.remove("active"));
@@ -796,81 +2339,122 @@ window.saveProject = async function() {
   }
   const btn = document.getElementById("modalSaveBtn");
   btn.textContent="Saving…"; btn.disabled=true;
+
+  // ── Phase 1: Save project data ─────────────────────────────────────────
+  let project = null;
+  let isNew   = !editingId;
+  let prev    = editingId ? allProjects().find(p => p.id === editingId) : null;
+  let stageChanged = false;
+
   try {
     const data = { name,type,status,priority,stage,due,links,notes,space:s };
 
-    if (pendingFile) {
-      // Upload raw file to Firebase Storage — store URL, not base64
-      btn.textContent = "Uploading…";
-      const projectId = editingId || `temp_${Date.now()}`;
-      // Delete old file from Storage if replacing
-      const oldProject = editingId ? allProjects().find(p => p.id === editingId) : null;
-      if (oldProject?.filePath) await deleteStorageFile(oldProject.filePath);
-
-      const result = await uploadProjectFile(projectId, pendingFile.file);
-      data.fileName = result.fileName;
-      data.fileType = result.fileType;
-      data.fileUrl  = result.url;      // ← Storage URL, tiny string
-      data.filePath = result.path;     // ← Storage path for deletion later
-      data.fileSize = result.fileSize;
-      data.fileData = null;            // ← clear any old base64
-    } else if (fileRemoved) {
-      // Delete from Storage and clear all file fields
-      const oldProject = editingId ? allProjects().find(p => p.id === editingId) : null;
-      if (oldProject?.filePath) await deleteStorageFile(oldProject.filePath);
-      data.fileName = null; data.fileType = null;
-      data.fileUrl  = null; data.filePath = null;
-      data.fileData = null; data.fileSize = null;
-    }
-    if (editingId) {
-      const prev = allProjects().find(p => p.id===editingId);
-      if (!prev) { console.warn('editProject: project not found', editingId); }
-      if (prev && Number(prev?.stage)!==stage) {
-        const hist=prev.history||[];
-        hist.push({action:"moved",by:CURRENT_USER,from:Number(prev.stage),stage,timestamp:Date.now()});
-        data.history=hist;
-        await notifyStageChange(prev,Number(prev.stage),stage);
+    // ── Handle multi-file attachments (base64 → Realtime DB, no Storage auth needed) ──
+    if (pendingFiles.length || _editingSavedFiles.length !== (prev?.files?.length ?? (prev?.fileData ? 1 : 0))) {
+      if (pendingFiles.length) {
+        btn.textContent = pendingFiles.length > 1 ? `Processing 1/${pendingFiles.length}…` : "Processing…";
       }
-      await updateProject(s,editingId,data); editingId=null; fileRemoved=false;
-      // Notify @mentions in notes (new mentions only)
+
+      // Convert each pending file to base64
+      const newlyEncoded = [];
+      for (let i = 0; i < pendingFiles.length; i++) {
+        if (pendingFiles.length > 1) btn.textContent = `Processing ${i+1}/${pendingFiles.length}…`;
+        const f = pendingFiles[i];
+        const b64 = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload  = e => resolve(e.target.result);
+          reader.onerror = () => reject(new Error(`Could not read file: ${f.name}`));
+          reader.readAsDataURL(f.file);
+        });
+        newlyEncoded.push({ fileName: f.name, fileType: f.type, fileData: b64, fileSize: f.size });
+      }
+
+      // Final files = kept saved files + newly encoded
+      const finalFiles = [..._editingSavedFiles, ...newlyEncoded];
+      data.files = finalFiles;
+
+      // Keep legacy single-file fields in sync (first file)
+      if (finalFiles.length) {
+        data.fileName = finalFiles[0].fileName;
+        data.fileType = finalFiles[0].fileType;
+        data.fileData = finalFiles[0].fileData;
+        data.fileUrl  = finalFiles[0].fileUrl  || null;
+        data.filePath = finalFiles[0].filePath || null;
+      } else {
+        data.files    = [];
+        data.fileName = null; data.fileType = null;
+        data.fileData = null; data.fileUrl  = null;
+        data.filePath = null; data.fileSize = null;
+      }
+    }
+
+    btn.textContent = "Saving…";
+
+    if (editingId) {
+      if (!prev) console.warn("editProject: project not found", editingId);
+      if (prev && Number(prev?.stage) !== stage) {
+        stageChanged = true;
+        const hist = prev.history || [];
+        hist.push({ action:"moved", by:CURRENT_USER, from:Number(prev.stage), stage, timestamp:Date.now() });
+        data.history = hist;
+      }
+      await updateProject(s, editingId, data);
+    } else {
+      project = await createProject({...data, createdBy:CURRENT_USER});
+    }
+  } catch(err) {
+    console.error("saveProject error:", err);
+    alert("Error saving project: " + (err.message || err));
+    btn.textContent = editingId ? "Update project" : "Save project";
+    btn.disabled = false;
+    return;
+  }
+
+  // ── Phase 2: Notifications (always run, separate try/catch) ───────────────
+  try {
+    if (isNew && project) {
+      let stageInfo = (SPACES[s]?.stages || []).find(st => st.id === stage);
+      // For custom spaces not yet in SPACES, fetch from Firebase
+      if (!stageInfo) {
+        try {
+          const cfg = await getSpaceConfig(s);
+          if (cfg?.stages) stageInfo = cfg.stages.find(st => st.id === stage);
+        } catch(e) {}
+      }
+      // Notify stage owners
+      if (stageInfo) await sendAssignmentNotif(stageInfo.owner, project, stageInfo);
+      // Notify ALL other users
+      await notifyAllUsers(
+        `🆕 New task: "${name}"`,
+        `${u_obj.name} created a new task in ${SPACES[s]?.label || s} — Step ${stage}: ${stageInfo?.name || ""}`,
+        { projectId: project.id, space: project.space || "email", projectName: name, type: "new_task" }
+      );
+      // @mentions in notes
+      if (notes) {
+        for (const uid of extractMentions(notes)) {
+          if (uid === CURRENT_USER) continue;
+          await pushNotification(uid, { title:`${u_obj.name} mentioned you in "${name}"`, message:`"${notes.slice(0,80)}"`, type:"mention", projectId: project.id, space: s });
+        }
+      }
+    } else if (!isNew && prev) {
+      // Stage change notification
+      if (stageChanged) await notifyStageChange(prev, Number(prev.stage), stage);
+      // New @mentions in notes
       if (notes) {
         const prevNotes = prev?.notes || "";
         const newMentions = extractMentions(notes).filter(uid => !extractMentions(prevNotes).includes(uid));
         for (const uid of newMentions) {
           if (uid === CURRENT_USER) continue;
-          await pushNotification(uid, { title:`${u_obj.name} mentioned you in "${data.name}"`, message:`Notes: "${notes.slice(0,80)}"`, type:"mention" });
-          await notifyUser(uid, { title:`${u_obj.name} mentioned you in a task`, message:`"${data.name}" — ${notes.slice(0,80)}`, projectName:data.name, fromUser:CURRENT_USER });
-        }
-      }
-    } else {
-      const project  = await createProject({...data,createdBy:CURRENT_USER});
-      const stageInfo = (SPACES[s]?.stages || []).find(st=>st.id===stage);
-      // Notify assigned stage owners
-      if (stageInfo) await sendAssignmentNotif(stageInfo.owner, project, stageInfo);
-      // Notify ALL users that a new task was created
-      await notifyAllUsers(
-        `New task added: "${data.name}"`,
-        `${u_obj.name} created a new task in ${SPACES[s]?.label || s} — Step ${stage}: ${stageInfo?.name || ""}`,
-        { projectId: project.id, space: project.space||"email", projectName: data.name, type: "new_task" }
-      );
-      // Notify @mentions in notes on creation
-      if (notes) {
-        for (const uid of extractMentions(notes)) {
-          if (uid === CURRENT_USER) continue;
-          await pushNotification(uid, { title:`${u_obj.name} mentioned you in "${data.name}"`, message:`"${notes.slice(0,80)}"`, type:"mention" });
-          await notifyUser(uid, { title:`${u_obj.name} mentioned you in a task`, message:`"${data.name}" — ${notes.slice(0,80)}`, projectName:data.name, fromUser:CURRENT_USER });
+          await pushNotification(uid, { title:`${u_obj.name} mentioned you in "${name}"`, message:`Notes: "${notes.slice(0,80)}"`, type:"mention" });
         }
       }
     }
-  } catch(err) {
-    console.error('saveProject error:', err);
-    alert('Error saving project: ' + (err.message || err));
-    btn.textContent = editingId ? "Update project" : "Save project";
-    btn.disabled = false;
-    return;
+  } catch(notifErr) {
+    console.warn("[Notif] saveProject notification error (non-fatal):", notifErr);
   }
-  btn.textContent = editingId ? "Update project" : "Save project";
-  btn.disabled=false;
+
+  btn.textContent = isNew ? "Save project" : "Update project";
+  btn.disabled = false;
   closeModal();
 };
 
@@ -921,9 +2505,9 @@ window.openDetail = function(p) {
       ${p.priority ? `<div class="detail-field"><div class="df-label">Priority</div><div class="df-val"><span class="badge badge-priority-${p.priority.toLowerCase()}">${p.priority==="High"?"🔴":p.priority==="Medium"?"🟡":"🟢"} ${p.priority}</span></div></div>` : ""}
       <div class="detail-field"><div class="df-label">Stage</div><div class="df-val"><span class="stage-pill" style="background:${sc}18;color:${sc}">${stage?.name||"—"}</span></div></div>
       <div class="detail-field"><div class="df-label">Owner</div><div class="df-val">${stage?DEFAULT_USERS[stage.owner]?.name||stage.owner:"—"}</div></div>
-      <div class="detail-field"><div class="df-label">Space</div><div class="df-val"><span class="space-banner space-banner-${sp}" style="background:${SPACE_COLORS[sp]}22;color:${SPACE_COLORS[sp]};font-size:11px;padding:2px 8px;border-radius:10px">${SPACES[sp]?.label||sp}</span></div></div>
+      <div class="detail-field"><div class="df-label">Space</div><div class="df-val"><span class="space-banner space-banner-${sp}" style="background:${(SPACE_COLORS[sp]||SPACES[sp]?.color||'#3b7dd8')}22;color:${SPACE_COLORS[sp]||SPACES[sp]?.color||'#3b7dd8'};font-size:11px;padding:2px 8px;border-radius:10px">${SPACES[sp]?.label||sp}</span></div></div>
       <div class="detail-field"><div class="df-label">Due date</div><div class="df-val">${p.due?formatDate(p.due):"—"}</div></div>
-      ${p.fileName?`<div class="detail-field"><div class="df-label">File</div><div class="df-val"><button class="file-open-btn" onclick="viewFile('${p.id}')">Open ${p.fileName}</button></div></div>`:""}
+      ${(()=>{const pf=getProjectFiles(p);if(!pf.length)return"";if(pf.length===1)return`<div class="detail-field"><div class="df-label">File</div><div class="df-val"><button class="file-open-btn" onclick="viewFile('${p.id}',0)">Open ${pf[0].fileName}</button></div></div>`;return`<div class="detail-field full"><div class="df-label">Files (${pf.length})</div><div class="df-val" style="display:flex;gap:8px;flex-wrap:wrap">${pf.map((f,i)=>{if(f.fileType?.includes("image"))return`<img src="${f.fileUrl||f.fileData}" onclick="viewFile('${p.id}',${i})" style="width:56px;height:56px;object-fit:cover;border-radius:6px;cursor:pointer;border:1px solid var(--border)" title="${f.fileName}"/>`;return`<button class="file-open-btn" onclick="viewFile('${p.id}',${i})">${f.fileType?.includes("pdf")?"📄":"📝"} ${f.fileName}</button>`}).join("")}</div></div>`;})()}
       ${normaliseLinkData(p).length ? `<div class="detail-field full"><div class="df-label">Links</div>
         <div class="detail-links-section">
           ${normaliseLinkData(p).map(l => {
@@ -1003,7 +2587,9 @@ window.closeDetailOutside = e => { if (e.target.id==="detailModal") closeDetail(
 window.editProject = function(id, sp) {
   try {
     const p = allProjects().find(x=>x.id===id); if (!p) { console.error("editProject: project not found", id); return; }
-    editingId=id; pendingFile=null; fileRemoved=false;
+    editingId=id; pendingFiles=[]; removedFilePaths=[];
+    // Load existing files into _editingSavedFiles
+    _editingSavedFiles = getProjectFiles(p).map(f => ({...f}));
     const pSpace = sp || p.space || "email";
     const pStages = SPACES[pSpace]?.stages || SPACES.email.stages;
     // Rebuild stage dropdown for this project's space
@@ -1017,19 +2603,19 @@ window.editProject = function(id, sp) {
     document.getElementById("f-due").value  = p.due  || "";
     document.getElementById("f-notes").value = p.notes || "";
     if (sel) sel.value = p.stage;
-  document.getElementById("attachedFilePreview").innerHTML=p.fileName?`<div class="attached-file"><div class="file-icon">${fileIcon(p.fileType)}</div><div class="file-name">${p.fileName}</div><button class="file-remove-btn" onclick="removePendingFile()" title="Remove file — you can then upload a new one">✕ Remove</button></div>`:"";
-  _modalLinks = normaliseLinkData(p).map(l => ({...l}));
-  renderLinkEditor();
-  // Rebuild type buttons for this project's space so correct types show
-  const editTypes = spaceTypes.length ? spaceTypes : (SPACES[pSpace]?.defaultTypes || ["Newsletter","Blog","Case Study"]);
-  const tg = document.getElementById("typeGroup");
-  if (tg) {
-    tg.innerHTML = editTypes.map(t =>
-      `<button class="seg-btn ${t===p.type?'active':''}" data-val="${t}" onclick="setSeg(this,'typeGroup')">${t}</button>`
-    ).join("") + `<button class="seg-btn" onclick="addCustomType()" title="Add custom type" style="font-size:16px;padding:5px 10px">+</button>`;
-  }
-  document.querySelectorAll("#statusGroup .seg-btn").forEach(b => b.classList.toggle("active",b.dataset.val===(p.status||"In Progress")));
-  document.querySelectorAll("#priorityGroup .seg-btn").forEach(b => b.classList.toggle("active",b.dataset.val===(p.priority||"")));
+    renderFilePreview();
+    _modalLinks = normaliseLinkData(p).map(l => ({...l}));
+    renderLinkEditor();
+    // Rebuild type buttons for this project's space so correct types show
+    const editTypes = spaceTypes.length ? spaceTypes : (SPACES[pSpace]?.defaultTypes || ["Newsletter","Blog","Case Study"]);
+    const tg = document.getElementById("typeGroup");
+    if (tg) {
+      tg.innerHTML = editTypes.map(t =>
+        `<button class="seg-btn ${t===p.type?'active':''}" data-val="${t}" onclick="setSeg(this,'typeGroup')">${t}</button>`
+      ).join("") + `<button class="seg-btn" onclick="addCustomType()" title="Add custom type" style="font-size:16px;padding:5px 10px">+</button>`;
+    }
+    document.querySelectorAll("#statusGroup .seg-btn").forEach(b => b.classList.toggle("active",b.dataset.val===(p.status||"In Progress")));
+    document.querySelectorAll("#priorityGroup .seg-btn").forEach(b => b.classList.toggle("active",b.dataset.val===(p.priority||"")));
     const saveBtn = document.getElementById("modalSaveBtn");
     if (saveBtn) saveBtn.textContent = "Update project";
     closeDetail();
@@ -1063,8 +2649,20 @@ window.markPublished = async function(id, sp) {
 };
 window.confirmDelete = async function(id, sp) {
   if (!confirm("Delete this project?")) return;
-  const p=allProjects().find(x=>x.id===id);
-  await deleteProject(sp||p?.space||"email",id);
+  const p = allProjects().find(x => x.id === id);
+  if (p) {
+    // Delete all attached files from Storage
+    const files = getProjectFiles(p);
+    for (const f of files) {
+      if (f.filePath) await deleteStorageFile(f.filePath).catch(() => {});
+    }
+    // Also clean up any checklist files
+    const checklist = p.checklist ? Object.values(p.checklist) : [];
+    for (const c of checklist) {
+      if (c.filePath) await deleteStorageFile(c.filePath).catch(() => {});
+    }
+  }
+  await deleteProject(sp || p?.space || "email", id);
   closeDetail();
 };
 
@@ -1079,15 +2677,12 @@ let _pendingCheckFile = null;
 window.setPendingCheckFile = function(event) {
   const file = event.target.files[0]; if (!file) return;
   if (file.size > 50*1024*1024) { alert("File too large — max 50MB"); return; }
-  const reader = new FileReader();
-  reader.onload = e => {
-    _pendingCheckFile = { name: file.name, type: file.type, data: e.target.result };
-    const preview = document.getElementById("pendingCheckFilePreview");
-    const nameEl  = document.getElementById("pendingCheckFileName");
-    if (preview) preview.style.display = "flex";
-    if (nameEl)  nameEl.textContent    = file.name;
-  };
-  reader.readAsDataURL(file);
+  // Store the raw File object directly — NOT base64
+  _pendingCheckFile = { file, name: file.name, type: file.type };
+  const preview = document.getElementById("pendingCheckFilePreview");
+  const nameEl  = document.getElementById("pendingCheckFileName");
+  if (preview) preview.style.display = "flex";
+  if (nameEl)  nameEl.textContent    = file.name;
   event.target.value = "";
 };
 
@@ -1104,13 +2699,19 @@ window.addCheck = async function(pid, sp) {
   const cl    = { ...p.checklist || {} };
   const id    = "c" + Date.now();
   cl[id] = { text, done: false };
-  // Attach pending file — upload to Storage, store URL
+  // Attach pending file — upload raw File to Storage, store URL
   if (_pendingCheckFile) {
-    const res = await uploadChecklistFile(pid, id, _pendingCheckFile.file);
-    cl[id].fileName = res.fileName;
-    cl[id].fileType = res.fileType;
-    cl[id].fileUrl  = res.url;
-    cl[id].filePath = res.path;
+    try {
+      const res = await uploadChecklistFile(pid, id, _pendingCheckFile.file);
+      cl[id].fileName = res.fileName;
+      cl[id].fileType = res.fileType;
+      cl[id].fileUrl  = res.url;
+      cl[id].filePath = res.path;
+    } catch(err) {
+      console.error("[Checklist] File upload failed:", err);
+      alert("File upload failed: " + (err.message || err));
+      return;
+    }
   }
   await updateProject(sp || p.space || "email", pid, { checklist: cl });
   input.value = "";
@@ -1163,37 +2764,57 @@ window.viewCheckFile = function(pid, cid) {
   const ch = cl[cid];
   const src = ch?.fileUrl || ch?.fileData;
   if (!src) return;
-  document.getElementById("fileViewerTitle").textContent = ch.fileName || "File";
-  const body = document.getElementById("fileViewerBody");
+
+  // Use the file review modal in simple mode (no versioning for checklist files)
+  document.getElementById("fvTitle").textContent   = ch.fileName || "File";
+  document.getElementById("fvMeta").textContent    = "Checklist attachment";
+  document.getElementById("fvDownloadAll").style.display = "none";
+  document.getElementById("fvFileTabs").style.display    = "none";
+  document.getElementById("fvVersionStrip").style.display = "none";
+  document.getElementById("fvCommentsPanel").style.display = "none";
+
+  const prevEl = document.getElementById("fvPreview");
   if (ch.fileType?.includes("image")) {
-    body.innerHTML = `<img src="${src}" style="max-width:100%;border-radius:8px"/>`;
+    prevEl.innerHTML = `<img src="${src}" style="max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;display:block;margin:auto"/>`;
   } else if (ch.fileType?.includes("pdf")) {
-    body.innerHTML = `<iframe src="${src}" style="width:100%;height:500px;border:none;border-radius:8px"></iframe>`;
+    prevEl.innerHTML = `<iframe src="${src}" style="width:100%;height:100%;min-height:400px;border:none;border-radius:8px"></iframe>`;
   } else {
-    body.innerHTML = `<div style="text-align:center;padding:2rem">
-      <div style="font-size:48px">📄</div>
-      <div style="margin-top:12px;font-size:14px;color:var(--text-2)">${ch.fileName}</div>
+    prevEl.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--text-2)">
+      <span style="font-size:56px">📄</span>
+      <div style="font-size:13px;font-weight:500">${ch.fileName}</div>
       <a href="${src}" target="_blank" rel="noopener" download="${ch.fileName}" class="btn-primary"
-         style="display:inline-block;margin-top:14px;text-decoration:none;padding:8px 16px;background:var(--purple);color:white;border-radius:var(--radius-sm)">Download</a>
+         style="display:inline-block;text-decoration:none;padding:8px 16px;background:var(--purple);color:white;border-radius:var(--radius-sm)">Download</a>
     </div>`;
   }
+
+  // Simple download-only actions
+  document.getElementById("fvActions").innerHTML = `
+    <a href="${src}" target="_blank" rel="noopener" download="${ch.fileName}" class="btn-ghost" style="font-size:12px;text-decoration:none">⬇ Download</a>`;
+
   document.getElementById("fileViewerModal").classList.add("open");
 };
 
 // Notify every user in the system (used for new task + published events)
 async function notifyAllUsers(titleFn, messageFn, extra = {}) {
-  const allUids = Object.keys(DEFAULT_USERS);
+  // Use live user list so custom/added users also get notified
+  let allUids;
+  try {
+    const stored = await getAllUsers();
+    allUids = [...new Set([...Object.keys(DEFAULT_USERS), ...Object.keys(stored)])];
+  } catch(e) {
+    allUids = Object.keys(DEFAULT_USERS); // fallback
+  }
   await Promise.all(allUids.map(async uid => {
     if (uid === CURRENT_USER) return; // skip self
     try {
       await pushNotification(uid, {
-        title: typeof titleFn === "function" ? titleFn(uid) : titleFn,
+        title:   typeof titleFn   === "function" ? titleFn(uid)   : titleFn,
         message: typeof messageFn === "function" ? messageFn(uid) : messageFn,
         type: extra.type || "general",
         ...extra
       });
       await notifyUser(uid, {
-        title: typeof titleFn === "function" ? titleFn(uid) : titleFn,
+        title:   typeof titleFn   === "function" ? titleFn(uid)   : titleFn,
         message: typeof messageFn === "function" ? messageFn(uid) : messageFn,
         projectName: extra.projectName,
         fromUser: CURRENT_USER,
@@ -1221,14 +2842,23 @@ async function sendAssignmentNotif(toUser, project, stageInfo) {
 }
 
 async function notifyStageChange(project, fromId, toId) {
-  // Get the space — fall back through multiple sources
   const sp = project.space || getCurrentSpace() || "email";
 
-  // Try live SPACES first, then BASE_SPACES, then hardcoded defaults
+  // Try live SPACES first (includes custom spaces if applyAllSpaceData has run)
   let stages = SPACES[sp]?.stages || BASE_SPACES[sp]?.stages;
 
-  // If stages still not found, use email stages as fallback
-  if (!stages) stages = BASE_SPACES.email.stages;
+  // For custom spaces not yet in SPACES, load config directly from Firebase
+  if (!stages) {
+    try {
+      const cfg = await getSpaceConfig(sp);
+      if (cfg?.stages?.length) stages = cfg.stages;
+    } catch(e) {}
+  }
+
+  if (!stages) {
+    console.warn(`[Notif] No stages found for space "${sp}" — skipping notification`);
+    return;
+  }
 
   const toStage = stages.find(s => s.id === Number(toId));
   if (!toStage) {
@@ -1261,27 +2891,98 @@ async function init() {
   buildFilterButtons();
   updateSpaceBanner();
 
+  // Fetch Firebase users in background — update ALL_USERS and cache for @mentions
+  getAllUsers().then(stored => {
+    const merged = { ...DEFAULT_USERS };
+    Object.entries(stored).forEach(([k,v]) => { merged[k] = { ...(merged[k]||{}), ...v }; });
+    // Update in-place so existing references to ALL_USERS see new users
+    Object.assign(ALL_USERS, merged);
+    // Persist for instant next load
+    cacheUsers(merged);
+  }).catch(() => {});
+
   // Subscribe to space config overrides (name/owner edits from settings)
-  let _lastSpaceConfigJson = "";
-  subscribeSpaceConfigs(configs => {
-    const json = JSON.stringify(configs);
-    if (json === _lastSpaceConfigJson) return; // no-op if unchanged
-    _lastSpaceConfigJson = json;
-    const merged = mergeSpaceConfig(configs);
-    Object.assign(SPACES, merged);
+  // ── Space config + custom spaces — always applied together ──────────────
+  // Keeping both pieces of state in sync prevents the race where one
+  // subscription fires before the other, wiping the other's changes.
+  let _latestSpaceConfigs = {};
+  let _latestCustomSpaces  = {};
+
+  function applyAllSpaceData() {
+    // Step 1: start from BASE_SPACES
+    const fresh = JSON.parse(JSON.stringify(BASE_SPACES));
+
+    // Step 2: overlay config overrides (renamed labels, new stages) for base spaces
+    const withConfigs = mergeSpaceConfig(_latestSpaceConfigs, fresh);
+
+    // Step 3: add custom spaces, then apply config overrides to them too
+    const withCustom = mergeCustomSpaces(_latestCustomSpaces, withConfigs);
+
+    // Step 4: apply config overrides again for custom space ids
+    // (mergeSpaceConfig skips ids not in its base, so we do a targeted pass)
+    Object.entries(_latestSpaceConfigs).forEach(([sid, cfg]) => {
+      if (!withCustom[sid]) return;
+      if (cfg.label)  withCustom[sid].label  = cfg.label;
+      if (cfg.color)  withCustom[sid].color  = cfg.color;
+      if (cfg.stages && cfg.stages.length) {
+        withCustom[sid].stages = cfg.stages.map((sc, i) => ({
+          id:          i + 1,
+          key:         `s${i + 1}`,
+          name:        sc.name        || `Step ${i + 1}`,
+          owner:       sc.owner       || "jc",
+          owners:      sc.owners      || [sc.owner || "jc"],
+          ownersLabel: sc.ownersLabel || [sc.ownerLabel || sc.owner || "JC"],
+          ownerLabel:  sc.ownersLabel?.length
+            ? sc.ownersLabel.join(", ")
+            : (sc.ownerLabel || sc.owner || "JC")
+        }));
+      }
+    });
+
+    // Step 5: replace SPACES in place — keeps existing object reference
+    Object.keys(SPACES).forEach(k => delete SPACES[k]);
+    Object.assign(SPACES, withCustom);
+
+    // Step 5b: persist to localStorage so next page load renders instantly
+    cacheSpaces(withCustom);
+
+    // Step 6: rebuild all board UI that reads from SPACES
+    fvRefreshSidebar();
+    buildStageDropdown();
+    buildFilterButtons();
+    buildTypeButtons();
     renderAll();
     updateSpaceBanner();
+  }
+
+  // No dedup guards — Firebase onValue fires once on attach (initial data)
+  // then again only when data changes. We WANT the initial fire to always
+  // apply, so custom spaces appear on every page load without user interaction.
+  subscribeSpaceConfigs(configs => {
+    _latestSpaceConfigs = configs;
+
+    // Fast path: apply config overrides to SPACES immediately so labels/colors
+    // update in sidebar without waiting for the full board rebuild.
+    const quickWithConfig = mergeSpaceConfig(configs, { ...SPACES });
+    Object.keys(SPACES).forEach(k => delete SPACES[k]);
+    Object.assign(SPACES, quickWithConfig);
+    fvRefreshSidebar();
+
+    applyAllSpaceData();
   });
 
-  // Subscribe to custom spaces so board reflects added/updated custom spaces
-  let _lastCustomJson = "";
   subscribeCustomSpaces(customs => {
-    const json = JSON.stringify(customs);
-    if (json === _lastCustomJson) return;
-    _lastCustomJson = json;
-    // Merge custom spaces into SPACES
-    const withCustom = mergeCustomSpaces(customs, SPACES);
-    Object.assign(SPACES, withCustom);
+    _latestCustomSpaces = customs;
+
+    // ── Fast path: update SPACES and sidebar IMMEDIATELY ──────────────────
+    // Do this BEFORE applyAllSpaceData (which rebuilds the whole board) so
+    // the sidebar reflects custom spaces the instant Firebase responds.
+    const quickMerged = mergeCustomSpaces(customs, { ...BASE_SPACES });
+    Object.keys(SPACES).forEach(k => delete SPACES[k]);
+    Object.assign(SPACES, quickMerged);
+    cacheSpaces(quickMerged);       // persist so next load is instant
+    fvRefreshSidebar();             // sidebar updated NOW — no board rebuild needed
+
     // Subscribe to projects in each custom space
     Object.keys(customs).forEach(sid => {
       if (!projectsBySpace[sid]) {
@@ -1292,13 +2993,28 @@ async function init() {
         });
       }
     });
-    renderAll();
-    updateSpaceBanner();
+
+    // Full apply (applies spaceConfig overrides, rebuilds board UI)
+    applyAllSpaceData();
   });
 
   ["email","pdf","prints"].forEach(sp => {
     subscribeProjects(sp, projects => {
       projectsBySpace[sp] = projects;
+      // Sync fileReviews into local cache
+      projects.forEach(p => { if (p.fileReviews) fvSyncFromFirebase(p); });
+      // If another user uploaded a new version, clear local version cache
+      if (_fvProjectId) {
+        const cur = projects.find(x => x.id === _fvProjectId);
+        if (cur) {
+          const cached = _vcGet();
+          if (cached) {
+            const fbSlot = fvGetSlot(cur, _fvFileIdx);
+            const fbLen  = (fbSlot?.versions || []).length;
+            if (fbLen > cached.length) { _vcClear(); }
+          }
+        }
+      }
       renderAll();
     });
   });

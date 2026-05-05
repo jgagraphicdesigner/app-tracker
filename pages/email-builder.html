@@ -2,10 +2,6 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-  <link rel="icon" type="image/x-icon" href="../assets/favicon.ico"/>
-  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png"/>
-  <link rel="icon" type="image/png" sizes="16x16" href="../assets/favicon-16.png"/>
-  <link rel="apple-touch-icon" sizes="192x192" href="../assets/icon-192.png"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,viewport-fit=cover"/>
 <meta name="theme-color" content="#2a1a3a"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
@@ -462,10 +458,7 @@
     </div><!-- /eb-left -->
 
     <!-- ── RIGHT ── -->
-    <button id="mobilePreviewToggle" onclick="toggleMobilePreview()" style="display:none;width:100%;padding:12px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:var(--radius-sm);font-size:13px;font-weight:500;color:var(--text-2);cursor:pointer;margin-bottom:4px;text-align:left">
-      👁 Show Preview &amp; Templates ▾
-    </button>
-    <div class="eb-right" id="ebRight">
+    <div class="eb-right">
 
       <!-- Live preview -->
       <div class="preview-card">
@@ -496,39 +489,28 @@
 <div class="eb-toast" id="ebToast"></div>
 
 <script type="module">
-import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, setCurrentSpace } from "../js/helpers.js";
+import { authGuard, getCurrentSpace, setupSidebar, setupNotifBadge, initTheme, updateThemeBtn, toggleTheme, setCurrentSpace , mergeSpaceConfig, mergeCustomSpaces, BASE_SPACES, getCachedSpaces, cacheSpaces} from "../js/helpers.js"
 import { renderSidebar, renderBottomNav } from "../js/sidebar.js";
 
 const CURRENT_USER = authGuard();
 if (!CURRENT_USER) throw new Error("not auth");
-document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("email-builder", getCurrentSpace()));
-
-// Mobile preview toggle
-window.toggleMobilePreview = function() {
-  const panel = document.getElementById("ebRight");
-  const btn   = document.getElementById("mobilePreviewToggle");
-  const open  = panel.style.display !== "none";
-  panel.style.display = open ? "none" : "";
-  btn.textContent = open ? "👁 Show Preview & Templates ▾" : "👁 Hide Preview ▴";
-};
-
-function applyMobilePreviewLayout() {
-  const btn   = document.getElementById("mobilePreviewToggle");
-  const panel = document.getElementById("ebRight");
-  if (window.innerWidth <= 768) {
-    btn.style.display = "block";
-    panel.style.display = "none";
-    btn.textContent = "👁 Show Preview & Templates ▾";
-  } else {
-    btn.style.display = "none";
-    panel.style.display = "";
-  }
-}
-applyMobilePreviewLayout();
-window.addEventListener("resize", applyMobilePreviewLayout);
+document.getElementById("appShell").insertAdjacentHTML("afterbegin", renderSidebar("email-builder", getCurrentSpace(), getCachedSpaces()));
 document.querySelector(".main").insertAdjacentHTML("beforeend", renderBottomNav("email-builder"));
 setupSidebar(CURRENT_USER);
 setupNotifBadge(CURRENT_USER);
+// Keep sidebar spaces list in sync with custom spaces
+// Keep sidebar in sync with both custom spaces AND space config overrides
+let _sidebarCustoms = {};
+let _sidebarConfigs = {};
+function _refreshPageSidebar() {
+  const sb = document.getElementById("sidebar"); if (!sb) return;
+  const merged = mergeSpaceConfig(_sidebarConfigs, mergeCustomSpaces(_sidebarCustoms, BASE_SPACES));
+  cacheSpaces(merged);
+  sb.outerHTML = renderSidebar("email-builder", getCurrentSpace(), merged);
+  setupSidebar(CURRENT_USER);
+}
+subscribeCustomSpaces(_cs => { _sidebarCustoms = _cs; _refreshPageSidebar(); });
+subscribeSpaceConfigs(_cfg => { _sidebarConfigs = _cfg; _refreshPageSidebar(); });
 initTheme(); updateThemeBtn(localStorage.getItem("theme") || "light");
 window.toggleTheme    = toggleTheme;
 window.doLogout       = () => { sessionStorage.clear(); window.location.href = "../index.html"; };
