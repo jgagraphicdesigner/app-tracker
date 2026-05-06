@@ -1,3 +1,21 @@
+const MOBILE_POLISH_LINK_ATTR = "data-app-mobile-polish";
+
+function installMobilePolish() {
+  const pageFile = (window.location.pathname.split("/").pop() || "index.html").replace(/\.html$/, "") || "index";
+  if (document.body) document.body.dataset.page = pageFile;
+
+  const href = new URL("../css/mobile-polish.css", import.meta.url).href;
+  if (document.querySelector(`link[${MOBILE_POLISH_LINK_ATTR}]`)) return;
+
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = href;
+  link.setAttribute(MOBILE_POLISH_LINK_ATTR, "true");
+  document.head.appendChild(link);
+}
+
+installMobilePolish();
+
 export function renderSidebar(activePage, activeSpace, extraSpaces = {}) {
   const BASE_IDS = ['email', 'pdf', 'prints'];
   const BASE_COLORS = { email:'#7c5cbf', pdf:'#2aab6f', prints:'#e0694a' };
