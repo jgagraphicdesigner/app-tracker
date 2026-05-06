@@ -118,8 +118,9 @@
   body.chat-page .chat-layout {
     position: fixed !important;
     top: 54px; left: 0; right: 0;
-    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
-    height: auto !important;
+    bottom: 60px;
+    height: calc(100vh - 114px) !important;
+    height: calc(var(--chat-vh, 100dvh) - 114px) !important;
     min-height: 0 !important;
     background: var(--surface);
     overscroll-behavior: contain;
@@ -353,6 +354,14 @@
 }
 </style>
 
+<script>
+function setChatViewportHeight() {
+  document.documentElement.style.setProperty("--chat-vh", window.innerHeight + "px");
+}
+setChatViewportHeight();
+window.addEventListener("resize", setChatViewportHeight);
+window.addEventListener("orientationchange", () => setTimeout(setChatViewportHeight, 250));
+</script>
 <script type="module" src="../js/chat.js"></script>
 <!-- Create group modal -->
 <div class="modal-overlay" id="createGroupModal" onclick="if(event.target.id==='createGroupModal')closeCreateGroupModal()">
