@@ -1,0 +1,394 @@
+/* APP Tracker desktop and tablet polish layer.
+   Loaded after main.css by js/sidebar.js. */
+
+@media (min-width: 769px) {
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    background: #f7f7fb;
+  }
+
+  .app-shell,
+  .main {
+    min-width: 0;
+  }
+
+  .main {
+    overflow-x: hidden;
+  }
+
+  .topbar {
+    box-shadow: 0 1px 2px rgba(26, 24, 48, .04);
+  }
+
+  .page-content {
+    width: 100%;
+    max-width: 1320px;
+    margin: 0 auto;
+  }
+
+  .stat-card,
+  .chart-section,
+  .space-quick-overview,
+  .space-overview-card,
+  .person-dash-card,
+  .person-card,
+  .profile-card,
+  .canva-link-card,
+  .library-file-card,
+  .eb-card,
+  .npi-card {
+    border-color: rgba(26, 24, 48, .08);
+    box-shadow: 0 1px 2px rgba(26, 24, 48, .05);
+  }
+
+  .btn-primary,
+  .btn-ghost,
+  .btn-danger,
+  .filter-btn,
+  .chart-tab,
+  .mode-tab,
+  .canva-cat-btn {
+    min-height: 36px;
+  }
+
+  /* Board: keep the wide kanban grid inside its own scroll area. */
+  body[data-page="dashboard"] .page-content {
+    max-width: none;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
+  body[data-page="dashboard"] .board-scroll {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: visible;
+    padding: 0 2px 16px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  body[data-page="dashboard"] .board {
+    width: max-content;
+    min-width: min(1700px, calc(100vw - var(--sidebar-w) - 48px));
+  }
+
+  body[data-page="dashboard"] .board-7 {
+    grid-template-columns: repeat(7, minmax(230px, 1fr));
+  }
+
+  body[data-page="dashboard"] .stage-col {
+    min-width: 230px;
+  }
+
+  body[data-page="dashboard"] .chart-section,
+  body[data-page="dashboard"] .completed-section,
+  body[data-page="dashboard"] .space-quick-overview {
+    max-width: 100%;
+  }
+
+  /* Chat: desktop layout should not leak the members panel into the conversation. */
+  body[data-page="chat"] .chat-layout {
+    background: var(--surface);
+  }
+
+  body[data-page="chat"] .chat-sidebar {
+    width: 300px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+  }
+
+  body[data-page="chat"] .chat-sidebar-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    color: var(--text-1);
+  }
+
+  body[data-page="chat"] .chat-room-list {
+    background: #fbfbfd;
+    padding: 10px 10px 18px;
+  }
+
+  body[data-page="chat"] .chat-room-section-label {
+    color: var(--text-3);
+    padding: 14px 6px 6px;
+  }
+
+  body[data-page="chat"] .chat-room-item {
+    min-height: 58px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  body[data-page="chat"] .chat-room-item:hover {
+    background: var(--surface2);
+  }
+
+  body[data-page="chat"] .chat-room-item.active {
+    background: var(--purple-dim);
+    border-color: rgba(124, 92, 191, .24);
+  }
+
+  body[data-page="chat"] .chat-room-name {
+    color: var(--text-1);
+  }
+
+  body[data-page="chat"] .chat-room-preview {
+    color: var(--text-3);
+  }
+
+  body[data-page="chat"] .chat-room-icon {
+    background: var(--surface2);
+  }
+
+  body[data-page="chat"] .chat-new-group-btn {
+    color: var(--text-2);
+    border: 1px dashed var(--border2);
+    border-radius: 10px;
+    margin: 6px 0 10px;
+  }
+
+  body[data-page="chat"] .chat-new-group-btn:hover {
+    background: var(--surface2);
+    color: var(--text-1);
+  }
+
+  body[data-page="chat"] .chat-section-divider {
+    border-color: var(--border);
+  }
+
+  body[data-page="chat"] .chat-main {
+    min-width: 0;
+    background: #f7f7fb;
+  }
+
+  body[data-page="chat"] .chat-header {
+    background: var(--surface);
+  }
+
+  body[data-page="chat"] .chat-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  body[data-page="chat"] .chat-header-left > div:last-child {
+    min-width: 0;
+  }
+
+  body[data-page="chat"] .chat-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  body[data-page="chat"] .chat-messages {
+    background: linear-gradient(180deg, #fbfbfd 0%, #f4f3f8 100%);
+  }
+
+  body[data-page="chat"] .chat-input-row {
+    background: rgba(255, 255, 255, .98);
+    box-shadow: 0 -1px 8px rgba(26, 24, 48, .04);
+  }
+
+  [data-theme="dark"] body[data-page="chat"] .chat-main,
+  [data-theme="dark"] body[data-page="chat"] .chat-messages {
+    background: var(--bg);
+  }
+
+  [data-theme="dark"] body[data-page="chat"] .chat-input-row {
+    background: rgba(30, 30, 39, .98);
+  }
+
+  body[data-page="chat"] .members-panel {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 320px;
+    max-width: min(320px, 42vw);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    box-shadow: -16px 0 32px rgba(26, 24, 48, .08);
+    z-index: 8;
+    transform: translateX(100%);
+    transition: transform .22s ease;
+    overflow-y: auto;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  body[data-page="chat"] .members-panel.open {
+    transform: translateX(0);
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  body[data-page="chat"] .members-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  body[data-page="chat"] .members-panel-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-1);
+  }
+
+  body[data-page="chat"] .members-panel-close {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  /* File library: move menus are hidden until the user opens one. */
+  body[data-page="files"] .library-layout {
+    min-width: 0;
+  }
+
+  body[data-page="files"] .library-main {
+    min-width: 0;
+  }
+
+  body[data-page="files"] .folder-item,
+  body[data-page="files"] .folder-add-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 34px;
+    border-radius: 9px;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  body[data-page="files"] .folder-item:hover,
+  body[data-page="files"] .folder-add-btn:hover {
+    background: var(--surface2);
+    color: var(--text-1);
+  }
+
+  body[data-page="files"] .folder-item.active {
+    background: var(--purple-dim);
+    border-color: rgba(124, 92, 191, .24);
+    color: var(--purple);
+    font-weight: 600;
+  }
+
+  body[data-page="files"] .folder-add-btn {
+    margin-top: 8px;
+    border-color: var(--border);
+    background: var(--surface);
+    justify-content: center;
+  }
+
+  body[data-page="files"] .folder-actions {
+    margin-left: 6px;
+    display: flex;
+  }
+
+  body[data-page="files"] .folder-del-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-3);
+    cursor: pointer;
+  }
+
+  body[data-page="files"] .folder-del-btn:hover {
+    border-color: var(--rev-bd);
+    color: var(--rev-fg);
+    background: var(--rev-bg);
+  }
+
+  body[data-page="files"] .library-grid,
+  body[data-page="files"] .canva-links-grid {
+    align-items: start;
+  }
+
+  body[data-page="files"] .file-move-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 150px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    box-shadow: 0 12px 28px rgba(26, 24, 48, .16);
+    z-index: 30;
+  }
+
+  body[data-page="files"] .file-move-menu.open {
+    display: block;
+  }
+
+  body[data-page="files"] .file-move-option {
+    padding: 9px 14px;
+    font-size: 12px;
+    color: var(--text-2);
+    cursor: pointer;
+  }
+
+  body[data-page="files"] .file-move-option:hover {
+    background: var(--surface2);
+    color: var(--text-1);
+  }
+
+  body[data-page="files"] .lf-body,
+  body[data-page="files"] .canva-link-body {
+    min-width: 0;
+  }
+
+  body[data-page="email-builder"] .eb-wrap {
+    align-items: flex-start;
+  }
+
+  body[data-page="email-builder"] .eb-left,
+  body[data-page="email-builder"] .eb-right {
+    min-width: 0;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1180px) {
+  .page-content {
+    padding: 18px;
+  }
+
+  body[data-page="chat"] .chat-sidebar {
+    width: 280px;
+  }
+
+  body[data-page="dashboard"] .board {
+    min-width: 1450px;
+  }
+
+  body[data-page="files"] .library-sidebar {
+    width: 170px;
+  }
+}
