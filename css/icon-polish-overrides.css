@@ -1,0 +1,6 @@
+/* Small follow-up overrides for the modern icon layer. */
+
+.emoji-btn[title="Attach image"] > svg,
+.emoji-btn[aria-label="Attach image"] > svg {
+  display: none !important;
+}
