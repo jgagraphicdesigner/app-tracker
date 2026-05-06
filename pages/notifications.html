@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <meta name="apple-mobile-web-app-title" content="APP Tracker"/>
-<title>APP Project Management — Notifications</title>
+<title>APP Project Management - Notifications</title>
 <link rel="stylesheet" href="../css/main.css"/>
 <script>const t=localStorage.getItem("theme")||"light";document.documentElement.setAttribute("data-theme",t);</script>
 </head>
@@ -32,7 +32,7 @@
     </div>
   </div>
   <div class="page-content" style="padding:20px 24px">
-    <div style="max-width:660px;margin:0 auto"><div id="notifPageList"><p style="color:var(--text-3);font-size:13px;text-align:center;padding:3rem">Loading…</p></div></div>
+    <div style="max-width:660px;margin:0 auto"><div id="notifPageList"><p style="color:var(--text-3);font-size:13px;text-align:center;padding:3rem">Loading...</p></div></div>
   </div>
 </div>
 </div>
@@ -64,9 +64,9 @@ initTheme(); updateThemeBtn(localStorage.getItem("theme")||"light");
 window.toggleTheme = toggleTheme;
 window.doLogout = () => { sessionStorage.clear(); window.location.href = "../index.html"; };
 window.switchSpace = s => {};
-window.clearAll = async () => { await clearNotifications(CURRENT_USER); };
+window.clearAll = async () => { await clearNotifications(CURRENT_USER); renderNotifPage([]); };
 
-// ── Notification type config ──────────────────────────────────────────────
+// -- Notification type config ----------------------------------------------
 const NOTIF_CONFIG = {
   mention:   { icon:"🏷",  label:"Mention",     color:"#7c5cbf", bg:"rgba(124,92,191,.1)"  },
   dm:        { icon:"💬",  label:"Message",     color:"#3b7dd8", bg:"rgba(59,125,216,.1)"  },
@@ -122,22 +122,38 @@ function renderNotifCard(n) {
   </div>`;
 }
 
-let _lastNotifKey = "";
+let _lastNotifKey = null;
 let _allNotifs    = [];
+let _notifFallbackTimer = setTimeout(() => {
+  if (_lastNotifKey !== null) return;
+  _lastNotifKey = "";
+  _allNotifs = [];
+  renderNotifPage([]);
+}, 3500);
 
 subscribeNotifications(CURRENT_USER, notifs => {
-  const key = notifs.map(n => n.id + (n.read?"r":"u")).join(",");
+  clearTimeout(_notifFallbackTimer);
+  const safeNotifs = Array.isArray(notifs) ? notifs : [];
+  const key = safeNotifs.map(n => n.id + (n.read?"r":"u")).join(",");
   if (key === _lastNotifKey) return;
   _lastNotifKey = key;
-  _allNotifs = notifs;
-  renderNotifPage(notifs);
+  _allNotifs = safeNotifs;
+  renderNotifPage(safeNotifs);
 });
 
 function renderNotifPage(notifs) {
+  const safeNotifs = Array.isArray(notifs) ? notifs : [];
   const list    = document.getElementById("notifPageList");
-  const unreadN = notifs.filter(n => !n.read).length;
+  const unreadN = safeNotifs.filter(n => !n.read).length;
 
-  if (!notifs.length) {
+  const badge = document.getElementById("npiUnreadBadge");
+  if (badge) {
+    badge.textContent = unreadN > 0 ? `${unreadN} unread` : "All read";
+    badge.className   = unreadN > 0 ? "npi-badge npi-badge-unread" : "npi-badge npi-badge-read";
+    badge.style.display = safeNotifs.length ? "inline-flex" : "none";
+  }
+
+  if (!safeNotifs.length) {
     list.innerHTML = `
       <div class="npi-empty">
         <div style="font-size:48px;margin-bottom:12px">🔔</div>
@@ -147,14 +163,7 @@ function renderNotifPage(notifs) {
     return;
   }
 
-  // Update header badge
-  const badge = document.getElementById("npiUnreadBadge");
-  if (badge) {
-    badge.textContent = unreadN > 0 ? `${unreadN} unread` : "All read";
-    badge.className   = unreadN > 0 ? "npi-badge npi-badge-unread" : "npi-badge npi-badge-read";
-  }
-
-  const groups = groupByDate(notifs);
+  const groups = groupByDate(safeNotifs);
   let html = "";
   for (const [label, items] of Object.entries(groups)) {
     if (!items.length) continue;
