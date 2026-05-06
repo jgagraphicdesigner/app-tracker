@@ -10,6 +10,7 @@ let archiveOpen = false;
 let renderQueued = false;
 let isRendering = false;
 let suppressMutation = false;
+let archiveInitialized = false;
 const ARCHIVE_STYLES_ATTR = "data-app-previous-projects-styles";
 
 function escapeText(value) {
@@ -172,6 +173,8 @@ window.openPreviousProjectFromArchive = function(projectId) {
 };
 
 function initPreviousProjectsArchive() {
+  if (archiveInitialized) return;
+  archiveInitialized = true;
   installArchiveStyles();
   ["email", "pdf", "prints"].forEach(subscribeSpace);
   subscribeCustomSpaces(customs => {
@@ -209,7 +212,17 @@ function initPreviousProjectsArchive() {
   renderArchive();
 }
 
-initPreviousProjectsArchive();
+function waitForBoardReady(attempt = 0) {
+  const hasArchiveHost = document.getElementById("completedToggle") && document.getElementById("completedList");
+  const appReady = typeof window.openDetail === "function" && typeof window.switchSpace === "function";
+  if ((!hasArchiveHost || !appReady) && attempt < 100) {
+    setTimeout(() => waitForBoardReady(attempt + 1), 50);
+    return;
+  }
+  initPreviousProjectsArchive();
+}
+
+waitForBoardReady();
 
 function installArchiveStyles() {
   if (document.querySelector(`link[${ARCHIVE_STYLES_ATTR}]`)) return;
