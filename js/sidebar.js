@@ -16,6 +16,14 @@ function installMobilePolish() {
 
 installMobilePolish();
 
+try {
+  const firebaseHelpers = await import("./firebase.js");
+  globalThis.subscribeCustomSpaces ??= firebaseHelpers.subscribeCustomSpaces;
+  globalThis.subscribeSpaceConfigs ??= firebaseHelpers.subscribeSpaceConfigs;
+} catch (err) {
+  console.warn("[APP] Sidebar space sync unavailable", err);
+}
+
 export function renderSidebar(activePage, activeSpace, extraSpaces = {}) {
   const BASE_IDS = ['email', 'pdf', 'prints'];
   const BASE_COLORS = { email:'#7c5cbf', pdf:'#2aab6f', prints:'#e0694a' };
