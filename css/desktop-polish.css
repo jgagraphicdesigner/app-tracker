@@ -1,4 +1,5 @@
 @import url("./icon-polish.css");
+@import url("./icon-polish-overrides.css");
 
 /* APP Tracker desktop and tablet polish layer.
    Loaded after main.css by js/sidebar.js. */
