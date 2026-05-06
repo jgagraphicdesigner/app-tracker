@@ -13,11 +13,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <meta name="apple-mobile-web-app-title" content="APP Tracker"/>
-<title>APP Project Management — Chat</title>
+<title>APP Project Management - Chat</title>
 <link rel="stylesheet" href="../css/main.css"/>
 <script>const t=localStorage.getItem("theme")||"light";document.documentElement.setAttribute("data-theme",t);</script>
 </head>
-<body>
+<body class="chat-page">
 <div class="app-shell" id="appShell">
 <div class="main">
   <div class="topbar">
@@ -111,6 +111,246 @@
 
 <style>
 #emojiPanel { position: absolute; bottom: 100%; left: 0; }
+@media (max-width: 768px) {
+  body.chat-page { overflow: hidden; background: var(--surface); }
+  body.chat-page .main { min-height: 100dvh; padding-bottom: 0 !important; }
+  body.chat-page .topbar { box-shadow: 0 1px 10px rgba(24,19,45,.08); }
+  body.chat-page .chat-layout {
+    position: fixed !important;
+    top: 54px; left: 0; right: 0;
+    bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+    height: auto !important;
+    min-height: 0 !important;
+    background: var(--surface);
+    overscroll-behavior: contain;
+  }
+  body.chat-page .chat-main { height: 100%; min-height: 0; }
+  body.chat-page .chat-main.chat-panel-active { box-shadow: none; }
+  body.chat-page .chat-header {
+    min-height: 64px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    box-shadow: 0 1px 0 rgba(0,0,0,.02);
+  }
+  body.chat-page .chat-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+  body.chat-page .chat-header-left > div:last-child { flex: 1; min-width: 0; }
+  body.chat-page .chat-back-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 38px;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    gap: 0;
+    border-radius: 50%;
+    background: var(--purple-dim);
+    color: var(--purple);
+    font-size: 0;
+  }
+  body.chat-page .chat-back-btn svg { width: 20px; height: 20px; }
+  body.chat-page #chatRoomIcon {
+    width: 38px !important;
+    height: 38px !important;
+    border-radius: 12px !important;
+  }
+  body.chat-page .chat-header-name {
+    font-size: 15px;
+    line-height: 1.2;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.chat-page .chat-header-meta {
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  body.chat-page .chat-header-actions {
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  body.chat-page .chat-members-btn,
+  body.chat-page .chat-delete-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    min-height: 38px;
+    padding: 0 !important;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-2);
+  }
+  body.chat-page .chat-members-btn span,
+  body.chat-page .chat-delete-btn span { display: none !important; }
+  body.chat-page .chat-messages {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 14px 12px 18px;
+    gap: 12px;
+    background: linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+    overscroll-behavior: contain;
+  }
+  body.chat-page .chat-msg-wrap { display: flex; flex-direction: column; width: 100%; }
+  body.chat-page .chat-msg { max-width: 86%; align-items: flex-end; gap: 8px; }
+  body.chat-page .chat-msg.mine {
+    flex-direction: column;
+    align-items: flex-end;
+    max-width: 86%;
+    margin-left: auto;
+  }
+  body.chat-page .chat-msg:not(.mine) { align-items: flex-start; }
+  body.chat-page .chat-msg > div[style*="max-width"] { max-width: 100% !important; min-width: 0; }
+  body.chat-page .chat-bubble {
+    padding: 10px 13px;
+    font-size: 14px;
+    line-height: 1.45;
+    box-shadow: 0 1px 2px rgba(24,19,45,.08);
+  }
+  body.chat-page .chat-msg.mine .chat-bubble { background: var(--purple); color: #fff; }
+  body.chat-page .chat-msg-time { margin-top: 4px; font-size: 10px; color: var(--text-3); }
+  body.chat-page .msg-edited { margin-top: 3px; font-size: 10px; color: var(--text-3); text-align: right; }
+  body.chat-page .msg-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+    opacity: 1 !important;
+    position: static !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  body.chat-page .msg-actions:empty { display: none !important; }
+  body.chat-page .msg-act-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    min-height: 30px;
+    padding: 0 !important;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--text-2);
+    box-shadow: var(--shadow);
+    font-size: 0 !important;
+  }
+  body.chat-page .msg-act-btn[title="Edit"]::before { content: "✎"; font-size: 14px; line-height: 1; color: var(--purple); }
+  body.chat-page .msg-act-btn[title="Delete"]::before { content: "×"; font-size: 18px; line-height: 1; color: var(--rev-fg); }
+  body.chat-page .chat-input-row {
+    position: relative !important;
+    flex: 0 0 auto;
+    gap: 8px;
+    padding: 9px 10px 10px;
+    border-top: 1px solid var(--border);
+    background: rgba(255,255,255,.96);
+    box-shadow: 0 -6px 18px rgba(24,19,45,.06);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  [data-theme="dark"] body.chat-page .chat-input-row { background: rgba(30,30,39,.95); }
+  body.chat-page #msgInput {
+    min-width: 0;
+    height: 44px;
+    min-height: 44px;
+    padding: 0 14px;
+    border-radius: 22px;
+    border: 1px solid var(--border2);
+    background: var(--surface2);
+    font-size: 16px !important;
+  }
+  body.chat-page #msgInput:focus {
+    border-color: var(--purple);
+    background: var(--surface);
+    box-shadow: 0 0 0 3px var(--purple-dim);
+  }
+  body.chat-page .emoji-btn,
+  body.chat-page .chat-send-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 42px;
+    height: 42px;
+    min-width: 42px;
+    min-height: 42px;
+    padding: 0 !important;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  body.chat-page .emoji-btn { background: var(--surface2); color: var(--text-2); font-size: 20px; }
+  body.chat-page .emoji-btn svg { width: 19px; height: 19px; }
+  body.chat-page .chat-send-btn {
+    border-color: var(--purple);
+    background: var(--purple);
+    box-shadow: 0 6px 14px rgba(124,92,191,.25);
+  }
+  body.chat-page .emoji-panel {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: calc(100% + 8px) !important;
+    width: auto !important;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    background: var(--surface);
+    box-shadow: 0 12px 32px rgba(24,19,45,.18);
+  }
+  body.chat-page .emoji-panel button {
+    width: 100%;
+    min-height: 36px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+  }
+  body.chat-page .mention-popup,
+  body.chat-page #mentionPopup {
+    left: 10px !important;
+    right: 10px !important;
+    bottom: calc(100% + 8px) !important;
+    width: auto !important;
+    border-radius: 16px;
+  }
+  body.chat-page .chat-img { max-width: min(240px, 70vw); border-radius: 14px; }
+}
+@media (max-width: 390px) {
+  body.chat-page .chat-msg,
+  body.chat-page .chat-msg.mine { max-width: 90%; }
+  body.chat-page .chat-input-row { gap: 6px; padding-left: 8px; padding-right: 8px; }
+  body.chat-page .emoji-btn,
+  body.chat-page .chat-send-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+  body.chat-page #msgInput { padding: 0 12px; }
+}
 </style>
 
 <script type="module" src="../js/chat.js"></script>
