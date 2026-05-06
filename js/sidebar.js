@@ -1,17 +1,39 @@
 const MOBILE_POLISH_LINK_ATTR = "data-app-mobile-polish";
+const MOBILE_CHAT_PANEL_FIX_ATTR = "data-app-chat-panel-fix";
 
 function installMobilePolish() {
   const pageFile = (window.location.pathname.split("/").pop() || "index.html").replace(/\.html$/, "") || "index";
   if (document.body) document.body.dataset.page = pageFile;
 
   const href = new URL("../css/mobile-polish.css", import.meta.url).href;
-  if (document.querySelector(`link[${MOBILE_POLISH_LINK_ATTR}]`)) return;
+  if (!document.querySelector(`link[${MOBILE_POLISH_LINK_ATTR}]`)) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    link.setAttribute(MOBILE_POLISH_LINK_ATTR, "true");
+    document.head.appendChild(link);
+  }
 
-  const link = document.createElement("link");
-  link.rel = "stylesheet";
-  link.href = href;
-  link.setAttribute(MOBILE_POLISH_LINK_ATTR, "true");
-  document.head.appendChild(link);
+  if (!document.querySelector(`style[${MOBILE_CHAT_PANEL_FIX_ATTR}]`)) {
+    const style = document.createElement("style");
+    style.setAttribute(MOBILE_CHAT_PANEL_FIX_ATTR, "true");
+    style.textContent = `@media (max-width: 768px) {
+      body[data-page="chat"] .members-panel {
+        position: absolute !important;
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        bottom: 0 !important;
+        height: 70% !important;
+        z-index: 20;
+        pointer-events: none;
+      }
+      body[data-page="chat"] .members-panel.open {
+        pointer-events: auto;
+      }
+    }`;
+    document.head.appendChild(style);
+  }
 }
 
 installMobilePolish();
