@@ -1,0 +1,217 @@
+/* Modern icon polish layer. Loaded through desktop-polish.css. */
+
+:root {
+  --mi-menu: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M4 7h16M4 12h16M4 17h16' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-dashboard: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect x='4' y='4' width='7' height='6' rx='2' stroke='black' stroke-width='2'/%3E%3Crect x='13' y='4' width='7' height='10' rx='2' stroke='black' stroke-width='2'/%3E%3Crect x='4' y='12' width='7' height='8' rx='2' stroke='black' stroke-width='2'/%3E%3Cpath d='M14 18h6' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-board: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect x='4' y='4' width='5' height='16' rx='2' stroke='black' stroke-width='2'/%3E%3Crect x='10.5' y='4' width='5' height='16' rx='2' stroke='black' stroke-width='2'/%3E%3Crect x='17' y='4' width='3' height='16' rx='1.5' stroke='black' stroke-width='2'/%3E%3C/svg%3E");
+  --mi-chat: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M5 18.5V7.5A3.5 3.5 0 0 1 8.5 4h7A3.5 3.5 0 0 1 19 7.5v4A3.5 3.5 0 0 1 15.5 15H10l-5 3.5Z' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M9 9h6M9 12h4' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-mail: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect x='4' y='6' width='16' height='12' rx='3' stroke='black' stroke-width='2'/%3E%3Cpath d='m5 8 7 5 7-5' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-folder: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M4 8.5A2.5 2.5 0 0 1 6.5 6h3l2 2h6A2.5 2.5 0 0 1 20 10.5v5A2.5 2.5 0 0 1 17.5 18h-11A2.5 2.5 0 0 1 4 15.5v-7Z' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-bell: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M18 10.5V14l2 2H4l2-2v-3.5a6 6 0 0 1 12 0Z' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M9.5 18a2.5 2.5 0 0 0 5 0' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-users: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='9' cy='8' r='3.5' stroke='black' stroke-width='2'/%3E%3Cpath d='M3.5 19a5.5 5.5 0 0 1 11 0' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M16 6.5a3 3 0 0 1 0 5.8M17.5 15c1.7.7 3 2.1 3 4' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-user: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='8' r='4' stroke='black' stroke-width='2'/%3E%3Cpath d='M4.5 20a7.5 7.5 0 0 1 15 0' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-settings: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z' stroke='black' stroke-width='2'/%3E%3Cpath d='M12 3.5v2M12 18.5v2M4.6 7.2l1.7 1M17.7 15.8l1.7 1M4.6 16.8l1.7-1M17.7 8.2l1.7-1' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-log-out: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M10 5H6.5A2.5 2.5 0 0 0 4 7.5v9A2.5 2.5 0 0 0 6.5 19H10' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3Cpath d='M14 8l4 4-4 4M18 12H9' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-plus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 5v14M5 12h14' stroke='black' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-plus-circle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='8' stroke='black' stroke-width='2'/%3E%3Cpath d='M12 8v8M8 12h8' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-moon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M18.5 15.8A7.8 7.8 0 0 1 8.2 5.5a8 8 0 1 0 10.3 10.3Z' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-x: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='m7 7 10 10M17 7 7 17' stroke='black' stroke-width='2.2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-chevron-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='m15 5-7 7 7 7' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-trash: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M5 7h14M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M8 10l.6 8.2A2 2 0 0 0 10.6 20h2.8a2 2 0 0 0 2-1.8L16 10' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-edit: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M4 17.5V20h2.5L18.8 7.7a1.8 1.8 0 0 0 0-2.5 1.8 1.8 0 0 0-2.5 0L4 17.5Z' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='m14.5 7.2 2.3 2.3' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-smile: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Ccircle cx='12' cy='12' r='8' stroke='black' stroke-width='2'/%3E%3Cpath d='M8.5 10h.01M15.5 10h.01M8.5 14.2a4.5 4.5 0 0 0 7 0' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-paperclip: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='m19 11-8.4 8.4a5 5 0 0 1-7.1-7.1l9-9a3.5 3.5 0 1 1 5 5l-9 9a2 2 0 1 1-2.8-2.8l8.3-8.3' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-send: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='m4 5 16 7-16 7 3-7-3-7Z' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M7 12h13' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-file: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M7 3.5h7l4 4V18a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 18V5A1.5 1.5 0 0 1 7.5 3.5Z' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M14 4v4h4M9 13h6M9 16h4' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Crect x='4' y='5' width='16' height='14' rx='3' stroke='black' stroke-width='2'/%3E%3Ccircle cx='9' cy='10' r='1.6' fill='black'/%3E%3Cpath d='m7 16 3.2-3.2 2.4 2.4L14 13.8l3 3.2' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-upload: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 16V5M8 9l4-4 4 4M5 19h14' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-download: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M12 5v11M8 12l4 4 4-4M5 19h14' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --mi-printer: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M7 8V4h10v4M7 17H6a2 2 0 0 1-2-2v-3a3 3 0 0 1 3-3h10a3 3 0 0 1 3 3v3a2 2 0 0 1-2 2h-1' stroke='black' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='M8 14h8v6H8zM17 12h.01' stroke='black' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  --mi-check: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='m5 12 4.2 4L19 7' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+:where(.hamburger, .btn-icon, .modal-close, .members-panel-close, .chat-back-btn, .chat-members-btn, .chat-delete-btn, .emoji-btn, .chat-send-btn, .msg-act-btn, .chat-room-del, .folder-del-btn, .cl-action-btn, .tpl-del) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:where(.hamburger, .btn-icon, .modal-close, .members-panel-close, .chat-back-btn, .chat-members-btn, .chat-delete-btn, .emoji-btn, .chat-send-btn, .msg-act-btn, .chat-room-del, .folder-del-btn, .cl-action-btn, .tpl-del):hover {
+  transform: translateY(-1px);
+}
+
+:where(.hamburger, .btn-icon, .modal-close, .members-panel-close, .chat-back-btn, .chat-members-btn, .chat-delete-btn, .emoji-btn, .chat-send-btn, .msg-act-btn, .chat-room-del, .folder-del-btn, .cl-action-btn, .tpl-del):active {
+  transform: translateY(0) scale(.96);
+}
+
+:where(.hamburger, .btn-icon[onclick*="toggleNotifs"], .modal-close, .members-panel-close, .chat-back-btn, .chat-members-btn, .chat-delete-btn, .emoji-btn[title="Emoji"], .emoji-btn[title="Attach image"], .chat-send-btn, .msg-act-btn[title="Edit"], .msg-act-btn[title="Delete"], .chat-room-del, .folder-del-btn, .cl-action-btn[title="Edit"], .cl-action-btn[title="Delete"], .tpl-del, .theme-toggle, .btn-download, #fileDownloadBtn, #fileDeleteBtn, #fvDownloadAll, button[onclick*="fvDownloadCurrent"], .fv-vcard-del)::before,
+.sidebar .nav-item::before,
+.bottom-nav .bn-item:not([onclick*="openNewProject"])::before,
+.bottom-nav .bn-item[onclick*="openNewProject"] > div::before,
+.file-upload-icon::before,
+.completed-check::before,
+body[data-page="chat"] #chatRoomIcon::before,
+body[data-page="chat"] #room-group-all .chat-room-icon::before,
+body[data-page="chat"] #room-group-email .chat-room-icon::before,
+body[data-page="chat"] #room-group-pdf .chat-room-icon::before,
+body[data-page="chat"] #room-group-prints .chat-room-icon::before,
+.members-panel-title::before {
+  content: "";
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--modern-icon-size, 18px);
+  height: var(--modern-icon-size, 18px);
+  background: currentColor;
+  -webkit-mask: var(--modern-icon) center / contain no-repeat;
+  mask: var(--modern-icon) center / contain no-repeat;
+}
+
+.hamburger { --modern-icon: var(--mi-menu); --modern-icon-size: 21px; }
+.hamburger > svg,
+.btn-icon[onclick*="toggleNotifs"] > svg,
+.modal-close > svg,
+.chat-back-btn > svg,
+.chat-members-btn > svg,
+.chat-delete-btn > svg,
+.chat-send-btn > svg,
+.theme-toggle > svg,
+#fileDownloadBtn > svg,
+.btn-download > svg,
+.sidebar .nav-item > svg,
+.bottom-nav .bn-item > svg,
+.bottom-nav .bn-item[onclick*="openNewProject"] > div > svg { display: none !important; }
+
+.btn-icon[onclick*="toggleNotifs"] { --modern-icon: var(--mi-bell); --modern-icon-size: 18px; }
+.modal-close,
+.members-panel-close { --modern-icon: var(--mi-x); --modern-icon-size: 18px; font-size: 0 !important; }
+.chat-back-btn { --modern-icon: var(--mi-chevron-left); --modern-icon-size: 20px; }
+.chat-members-btn { --modern-icon: var(--mi-users); --modern-icon-size: 17px; }
+.chat-delete-btn { --modern-icon: var(--mi-trash); --modern-icon-size: 16px; }
+.chat-send-btn { --modern-icon: var(--mi-send); --modern-icon-size: 19px; }
+.chat-send-btn::before { background: #fff !important; transform: translateX(1px); }
+.emoji-btn[title="Emoji"] { --modern-icon: var(--mi-smile); --modern-icon-size: 20px; font-size: 0 !important; }
+.emoji-btn[title="Attach image"] { --modern-icon: var(--mi-paperclip); --modern-icon-size: 20px; font-size: 0 !important; }
+.msg-act-btn[title="Edit"] { --modern-icon: var(--mi-edit); --modern-icon-size: 15px; font-size: 0 !important; }
+.msg-act-btn[title="Delete"] { --modern-icon: var(--mi-trash); --modern-icon-size: 15px; font-size: 0 !important; }
+.msg-act-btn[data-modernized="true"]::before,
+body.chat-page .msg-act-btn[title="Edit"]::before,
+body.chat-page .msg-act-btn[title="Delete"]::before { content: "" !important; }
+.chat-room-del,
+.folder-del-btn,
+.tpl-del { --modern-icon: var(--mi-x); --modern-icon-size: 15px; font-size: 0 !important; }
+.cl-action-btn[title="Edit"] { --modern-icon: var(--mi-edit); --modern-icon-size: 15px; font-size: 0 !important; }
+.cl-action-btn[title="Delete"] { --modern-icon: var(--mi-trash); --modern-icon-size: 15px; font-size: 0 !important; }
+
+.sidebar .nav-item {
+  gap: 11px;
+}
+.sidebar .nav-item::before {
+  --modern-icon-size: 17px;
+  opacity: .94;
+}
+.sidebar .nav-item[onclick*="main-dashboard"] { --modern-icon: var(--mi-dashboard); }
+.sidebar .nav-item[onclick*="dashboard.html"] { --modern-icon: var(--mi-board); }
+.sidebar .nav-item[onclick*="chat.html"] { --modern-icon: var(--mi-chat); }
+.sidebar .nav-item[onclick*="email-builder.html"] { --modern-icon: var(--mi-mail); }
+.sidebar .nav-item[onclick*="files.html"] { --modern-icon: var(--mi-folder); }
+.sidebar .nav-item[onclick*="notifications.html"] { --modern-icon: var(--mi-bell); }
+.sidebar .nav-item[onclick*="people.html"] { --modern-icon: var(--mi-users); }
+.sidebar .nav-item[onclick*="profile.html"] { --modern-icon: var(--mi-user); }
+.sidebar .nav-item[onclick*="space-settings.html"] { --modern-icon: var(--mi-settings); }
+.sidebar .nav-item[onclick*="doLogout"] { --modern-icon: var(--mi-log-out); }
+.sidebar .nav-item[onclick*="openAddSpaceModal"] { --modern-icon: var(--mi-plus-circle); }
+
+.theme-toggle { --modern-icon: var(--mi-moon); --modern-icon-size: 17px; }
+
+.bottom-nav .bn-item:not([onclick*="openNewProject"])::before {
+  --modern-icon-size: 21px;
+  opacity: .92;
+}
+.bottom-nav .bn-item[onclick*="main-dashboard"] { --modern-icon: var(--mi-dashboard); }
+.bottom-nav .bn-item[onclick*="dashboard.html"] { --modern-icon: var(--mi-board); }
+.bottom-nav .bn-item[onclick*="chat.html"] { --modern-icon: var(--mi-chat); }
+.bottom-nav .bn-item[onclick*="profile.html"] { --modern-icon: var(--mi-user); }
+.bottom-nav .bn-item[onclick*="openNewProject"] > div::before {
+  --modern-icon: var(--mi-plus);
+  --modern-icon-size: 21px;
+  background: #fff;
+}
+.bottom-nav .bn-item.active::before {
+  opacity: 1;
+}
+
+.file-upload-icon {
+  --modern-icon: var(--mi-upload);
+  --modern-icon-size: 25px;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  background: var(--purple-dim);
+  color: var(--purple);
+  font-size: 0 !important;
+}
+body[data-page="email-builder"] .file-upload-icon { --modern-icon: var(--mi-image); }
+
+.completed-check {
+  --modern-icon: var(--mi-check);
+  --modern-icon-size: 16px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--green-dim, rgba(42,171,111,.12));
+  color: var(--green, #2aab6f);
+  font-size: 0 !important;
+}
+
+.members-panel-title {
+  --modern-icon: var(--mi-users);
+  --modern-icon-size: 17px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0 !important;
+}
+.members-panel-title::after {
+  content: "Members";
+  font-size: 14px;
+  font-weight: 700;
+}
+
+body[data-page="chat"] #chatRoomIcon,
+body[data-page="chat"] #room-group-all .chat-room-icon,
+body[data-page="chat"] #room-group-email .chat-room-icon,
+body[data-page="chat"] #room-group-pdf .chat-room-icon,
+body[data-page="chat"] #room-group-prints .chat-room-icon {
+  font-size: 0 !important;
+  color: var(--purple);
+}
+body[data-page="chat"] #chatRoomIcon { --modern-icon: var(--mi-chat); --modern-icon-size: 18px; }
+body[data-page="chat"] #room-group-all .chat-room-icon { --modern-icon: var(--mi-users); --modern-icon-size: 19px; }
+body[data-page="chat"] #room-group-email .chat-room-icon { --modern-icon: var(--mi-mail); --modern-icon-size: 18px; }
+body[data-page="chat"] #room-group-pdf .chat-room-icon { --modern-icon: var(--mi-file); --modern-icon-size: 18px; }
+body[data-page="chat"] #room-group-prints .chat-room-icon { --modern-icon: var(--mi-printer); --modern-icon-size: 18px; }
+
+body[data-page="chat"] .chat-room-icon,
+body[data-page="chat"] #chatRoomIcon {
+  border: 1px solid rgba(124, 92, 191, .18);
+}
+
+.btn-download,
+#fileDownloadBtn,
+#fvDownloadAll,
+button[onclick*="fvDownloadCurrent"] { --modern-icon: var(--mi-download); --modern-icon-size: 16px; }
+#fileDeleteBtn,
+.fv-vcard-del { --modern-icon: var(--mi-trash); --modern-icon-size: 16px; }
+#fileDeleteBtn::before,
+.fv-vcard-del::before { background: currentColor; }
+
+@media (max-width: 768px) {
+  .sidebar .nav-item::before { --modern-icon-size: 18px; }
+  .bottom-nav .bn-item:not([onclick*="openNewProject"])::before { --modern-icon-size: 20px; }
+  .chat-send-btn::before { --modern-icon-size: 18px; }
+}
