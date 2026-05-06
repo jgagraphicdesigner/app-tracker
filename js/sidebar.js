@@ -1,6 +1,7 @@
 const MOBILE_POLISH_LINK_ATTR = "data-app-mobile-polish";
 const DESKTOP_POLISH_LINK_ATTR = "data-app-desktop-polish";
 const MOBILE_CHAT_PANEL_FIX_ATTR = "data-app-chat-panel-fix";
+const PREVIOUS_PROJECTS_MODULE_ATTR = "data-app-previous-projects";
 
 function installMobilePolish() {
   const pageFile = (window.location.pathname.split("/").pop() || "index.html").replace(/\.html$/, "") || "index";
@@ -22,6 +23,14 @@ function installMobilePolish() {
     link.href = desktopHref;
     link.setAttribute(DESKTOP_POLISH_LINK_ATTR, "true");
     document.head.appendChild(link);
+  }
+
+  if (pageFile === "dashboard" && !document.querySelector(`script[${PREVIOUS_PROJECTS_MODULE_ATTR}]`)) {
+    const script = document.createElement("script");
+    script.type = "module";
+    script.src = new URL("./previous-projects.js", import.meta.url).href;
+    script.setAttribute(PREVIOUS_PROJECTS_MODULE_ATTR, "true");
+    document.head.appendChild(script);
   }
 
   if (!document.querySelector(`style[${MOBILE_CHAT_PANEL_FIX_ATTR}]`)) {
