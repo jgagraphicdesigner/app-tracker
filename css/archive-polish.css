@@ -1,0 +1,180 @@
+/* Previous projects archive view. Loaded by js/previous-projects.js. */
+
+.completed-header {
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.completed-header > div {
+  min-width: 0;
+}
+
+.completed-header h3 {
+  color: var(--text-1);
+}
+
+.completed-subtitle {
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.completed-toggle {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.project-archive-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgba(26, 24, 48, .04);
+}
+
+.project-archive-count {
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--text-1);
+}
+
+.project-archive-label,
+.project-archive-hint {
+  color: var(--text-3);
+  font-size: 12px;
+}
+
+.project-archive-label {
+  margin-top: 4px;
+}
+
+.project-archive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.project-archive-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 162px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(26, 24, 48, .05);
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+}
+
+.project-archive-card:hover {
+  border-color: var(--border2);
+  box-shadow: 0 8px 20px rgba(26, 24, 48, .08);
+  transform: translateY(-1px);
+}
+
+.project-archive-card-top,
+.project-archive-meta,
+.project-archive-foot {
+  display: flex;
+  align-items: center;
+}
+
+.project-archive-card-top {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.project-archive-space {
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 3px 9px;
+  background: var(--surface2);
+  color: var(--archive-space, var(--purple));
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.project-archive-name {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.project-archive-meta {
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.project-archive-foot {
+  margin-top: auto;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text-3);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.project-archive-empty {
+  padding: 24px 18px;
+  border: 1px dashed var(--border2);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text-3);
+  font-size: 13px;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .completed-header {
+    gap: 12px;
+  }
+
+  .completed-toggle {
+    min-height: 38px;
+    padding: 0 12px;
+  }
+
+  .project-archive-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 14px;
+  }
+
+  .project-archive-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .project-archive-card {
+    min-height: 150px;
+    border-radius: 10px;
+  }
+
+  .project-archive-foot {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
